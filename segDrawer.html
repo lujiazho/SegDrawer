@@ -1,0 +1,681 @@
+<html lang="en">
+
+<head>
+	<!-- <link href="./all.css" rel="stylesheet"> -->
+	<link href="./assets/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /*@font-face {
+      font-family: 'FontAwesome';
+      src: url('./fa-solid-900.ttf') format('truetype'),
+      url('./fa-solid-900.woff2') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }*/
+
+    #canvas-wrapper {
+      position: relative;
+      width: 500px;
+      height: 500px;
+    }
+
+    #slider-wrapper {
+      display: none;
+      position: absolute; /* Add this line */
+      z-index: 10; /* Add this line */
+      top: 47px; /* Adjust this value */
+      right: 50px; /* Adjust this value */
+    }
+
+    #canvas {
+      position: absolute;
+      border: 1px solid black;
+      width: 100%;
+      height: 100%;
+    }
+
+    #image-canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    .button-wrapper {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .button {
+      background-color: #4CAF50;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      padding: 4px 8px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 12px;
+      margin: 2px 0;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+    }
+
+    #file-input-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 500px;
+      height: 500px;
+      cursor: pointer;
+    }
+
+    #file-input-wrapper input[type=file] {
+      opacity: 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    #spinner-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #spinner-container span {
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      color: #333;
+      margin-top: 10px;
+    }
+
+  </style>
+</head>
+
+<body>
+	
+	<div id="canvas-wrapper">
+	  <canvas id="canvas"></canvas>
+    <canvas id="image-canvas"></canvas>
+	  <div class="button-wrapper">
+	  	<button class="button" id="remove-image"><i class="fas fa-times"></i></button>
+      <button class="button" id="draw-mask"><i class="fas fa-pencil"></i></button>
+      <button class="button" id="magic-tool"><i class="fas fa-wand-magic-sparkles"></i></button>
+      <button class="button" id="undo-path"><i class="fas fa-undo"></i></button>
+      <button class="button" id="eraser"><i class="fa-solid fa-eraser"></i></button>
+      <button class="button" id="save-images"><i class="fas fa-download"></i></button>
+	  </div>
+	  <div id="slider-wrapper">
+		  <input type="range" min="1" max="100" value="50" class="slider" id="brush-size">
+	  </div>
+	  <div id="file-input-wrapper">
+	  	<input type="file" id="file-input">
+	  </div>
+	</div>
+
+  <div id="spinner-container" class="position-fixed top-50 start-50 translate-middle d-none">
+      <div class="spinner-border text-primary" role="status"></div>
+      <span style="color: #dc3545; font-size: 2em;">Preprocessing image...</span>
+  </div>
+
+
+
+
+	<script type="text/javascript">
+    async function canvasToBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+              resolve(blob);
+          } else {
+              reject(new Error("Canvas to Blob conversion failed"));
+          }
+        });
+      });
+    }
+
+    async function blobToByteArray(blob) {
+      return new Uint8Array(await new Response(blob).arrayBuffer());
+    }
+    
+    // Magic tool functionality
+    const tolerance = 30;
+    const replacementColor = { r: 0, g: 0, b: 0 };
+
+    function magicToolHandler(event) {
+      if (!isMagicToolActive) return;
+      console.log("magic tool handler")
+
+      // step 1: get starting point
+      let x = event.offsetX;
+      let y = event.offsetY;
+
+      const scaleFactor = Math.min(canvas.width / originalUnresizedImageData.width, canvas.height / originalUnresizedImageData.height);
+      const scaledWidth = originalUnresizedImageData.width * scaleFactor;
+      const scaledHeight = originalUnresizedImageData.height * scaleFactor;
+
+      const delta_x = (canvas.width - scaledWidth) / 2;
+      const delta_y = (canvas.height - scaledHeight) / 2;
+
+      x -= delta_x;
+      y -= delta_y;
+
+      x /= scaleFactor;
+      y /= scaleFactor;
+
+      x = Math.round(x);
+      y = Math.round(y);
+
+      // step 2: get image data for flood fill
+      const imageWidth = imageCanvas.width;
+      const imageHeight = imageCanvas.height;
+      const imageData = imageContext.getImageData(0, 0, imageWidth, imageHeight);
+      const pixelData = imageData.data;
+
+      // // Save the previous image state
+      // const prevImageData = new ImageData(new Uint8ClampedArray(pixelData), imageWidth, imageHeight);
+
+      // step 3: get the start point index/color and do flood fill
+      const targetIndex = getPixelIndex(x, y, imageWidth);
+      const targetColor = {
+        r: pixelData[targetIndex],
+        g: pixelData[targetIndex + 1],
+        b: pixelData[targetIndex + 2],
+      };
+      
+      // floodFill(x, y, targetColor, replacementColor, tolerance, imageWidth, imageHeight, pixelData, pixels);
+      let mask = null;
+
+      const formData = new FormData();
+      formData.append("x", x);
+      formData.append("y", y);
+      // Send a POST request to the server API
+      fetch("http://127.0.0.1:8080/click", {
+          method: "POST",
+          body: formData,
+      })
+      .then((response) => response.json())
+      .then((data) => {
+          // console.log("Success:", data.masks);
+          let pixels = [];
+
+          // Get the base64-encoded image strings from the JSON response
+          const maskBase64 = data.masks;
+          const maskImage = new Image();
+          maskImage.src = `data:image/png;base64,${maskBase64}`;
+          maskImage.onload = function() {
+            // Create a canvas element and draw the image onto it
+            const tmpcanvas = document.createElement('canvas');
+            tmpcanvas.width = canvas.width;
+            tmpcanvas.height = canvas.height;
+            const tmpcontext = tmpcanvas.getContext('2d');
+
+            const scaleFactor = Math.min(tmpcanvas.width / maskImage.width, tmpcanvas.height / maskImage.height);
+            const scaledWidth = maskImage.width * scaleFactor;
+            const scaledHeight = maskImage.height * scaleFactor;
+
+            const x = (canvas.width - scaledWidth) / 2;
+            const y = (canvas.height - scaledHeight) / 2;
+
+            tmpcontext.drawImage(maskImage, x, y, scaledWidth, scaledHeight);
+
+            // Get the image data from the canvas
+            const imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+            const pixelData = imageData.data;
+
+            console.log(pixelData.length)
+            // Get the pixel indices of the mask
+            for (let i = 0; i < pixelData.length; i += 4) {
+              if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+                pixels.push(i);
+              }
+            }
+            console.log(pixels.length)
+            // step 4: put magic mask on canvas
+            const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const data = canvasData.data;
+            console.log(data.length)
+            for (let i = 0; i < pixels.length; i += 1) {
+              data[pixels[i]] = replacementColor.r; // red
+              data[pixels[i] + 1] = replacementColor.g; // green
+              data[pixels[i] + 2] = replacementColor.b; // blue
+              data[pixels[i] + 3] = 255; // alpha
+            }
+            context.putImageData(canvasData, 0, 0);
+
+            // step 5: Add the magic mask to drawnPaths array
+            drawnPaths.push({
+              points: pixels,
+              type: "magic",
+            });
+          };
+      })
+      .catch((error) => {
+          console.error("Error:", error);
+      }).finally(() => {
+          // // Hide the spinner
+          // spinnerContainer.classList.add("d-none");
+      });
+    }
+
+		const fileInput = document.getElementById('file-input');
+    // for drawer
+		const canvas = document.getElementById('canvas');
+		const context = canvas.getContext('2d');
+    // for image
+    const imageCanvas = document.getElementById('image-canvas');
+    const imageContext = imageCanvas.getContext('2d');
+    imageCanvas.style.zIndex = -1;
+
+    canvas.width = 500;
+    canvas.height = 500;
+		imageCanvas.width = 500;
+		imageCanvas.height = 500;
+    // for saving mask purpose
+    let scaledWidth = -1;
+    let scaledHeight = -1;
+    let scaledX = -1;
+    let scaledY = -1;
+
+    let originalUnresizedImageData;
+    let originalImageDataBackup;
+    // Add a new array to store drawn paths
+    const drawnPaths = [];
+    // for magic tool
+    let isMagicToolActive = false;
+    // for eraser
+    let isErasing = false;
+    // for draw mask, keep track of whether user is currently drawing
+    let isDrawing = false;
+		let isDown = false;
+    let lastX, lastY; // keep track of last position of the pointer
+
+    const slider = document.getElementById("brush-size");
+    let brushSize = slider.value;
+
+		const removeImageButton = document.getElementById('remove-image');
+		const drawMaskButton = document.getElementById('draw-mask');
+    const magicToolButton = document.getElementById('magic-tool');
+    const fileInputWrapper = document.getElementById('file-input-wrapper');
+
+    function stopDrawing() {
+      canvas.style.cursor = "auto";
+      // stop drawing
+      isDrawing = false;
+      sliderWrapper.style.display = 'none';
+    }
+    function stopMagicDrawing() {
+      canvas.style.cursor = "auto";
+      // stop magic drawing
+      try {
+        canvas.removeEventListener("mousedown", magicToolHandler);
+        console.log('remove magic tool handler')
+      } catch (error) {
+        console.log(error) // do nothing
+      }
+      isMagicToolActive = false;
+    }
+    function stopErasing() {
+      canvas.style.cursor = "auto";
+      // stop erasing
+      isErasing = false;
+    }
+
+    function hideFileInput() {
+    		fileInputWrapper.style.display = 'none';
+    	}
+
+    	function showFileInput() {
+    		fileInputWrapper.style.display = 'block';
+    	}
+
+		fileInput.addEventListener('change', (event) => {
+		  const file = event.target.files[0];
+
+      const image = new Image();
+		  image.onload = async () => {
+        const spinnerContainer = document.getElementById("spinner-container");
+        // Show the spinner
+        spinnerContainer.classList.remove("d-none");
+        
+        // for keeping original sized image
+        const tmp_canvas = document.createElement('canvas');
+        tmp_canvas.width = image.width;
+        tmp_canvas.height = image.height;
+
+        const ctx = tmp_canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, image.width, image.height);
+        originalUnresizedImageData = ctx.getImageData(0, 0, image.width, image.height);
+
+        // console.log(originalUnresizedImageData)
+        // console.log(imageCanvas.width, imageCanvas.height)
+        // console.log(image.width, image.height)
+		    const widthRatio = imageCanvas.width / image.width;
+		    const heightRatio = imageCanvas.height / image.height;
+		    const scaleFactor = Math.min(widthRatio, heightRatio);
+		    scaledWidth = image.width * scaleFactor;
+		    scaledHeight = image.height * scaleFactor;
+		    scaledX = (imageCanvas.width - scaledWidth) / 2;
+		    scaledY = (imageCanvas.height - scaledHeight) / 2;
+		    // reset width and height can refresh the canvas so that prev image will not be kept
+		    imageCanvas.width = 500;
+        imageCanvas.height = 500;
+		    imageContext.drawImage(image, scaledX, scaledY, scaledWidth, scaledHeight);
+        originalImageDataBackup = imageContext.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
+
+        hideFileInput();
+
+        const imageBlob = await canvasToBlob(tmp_canvas);
+        const imageByteArray = await blobToByteArray(imageBlob);
+
+        const formData = new FormData();
+        formData.append("image", new Blob([imageByteArray]), "image.png");
+        fetch("http://127.0.0.1:8080/image", {
+            method: "POST",
+            body: formData,
+        })
+        .then((response) => response.json())
+        .then((data) => {
+            console.log("Success:", data);
+        })
+        .catch((error) => {
+            console.error("Error:", error);
+        }).finally(() => {
+          // Hide the spinner
+          spinnerContainer.classList.add("d-none");
+          console.log('finally')
+        });
+		  };
+		  image.src = URL.createObjectURL(file);
+		});
+
+		removeImageButton.addEventListener('click', () => {
+			imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height); // clear the canvas
+      context.clearRect(0, 0, canvas.width, canvas.height); // clear the canvas
+      stopDrawing();
+      stopErasing();
+      stopMagicDrawing();
+      
+      while (drawnPaths.length > 0) {
+        drawnPaths.pop();
+      }
+			showFileInput();
+      // Reset the file input value, force the browser to treat the re-uploaded file as a new file
+      fileInput.value = '';
+		});
+
+    slider.addEventListener("input", () => {
+      brushSize = slider.value;
+    });
+
+    const sliderWrapper = document.getElementById('slider-wrapper');
+    sliderWrapper.style.display = 'none';
+
+		drawMaskButton.addEventListener('click', (event) => {
+      stopMagicDrawing();
+      stopErasing();
+      // toggle slider visibility
+      sliderWrapper.style.display = (sliderWrapper.style.display == 'none') ? 'block' : 'none';
+      // stop drawing
+      if (isDrawing) {
+        canvas.style.cursor = 'auto';
+        isDrawing = false;
+      }
+      // start drawing
+      else {
+        canvas.style.cursor = `crosshair`; // change cursor to a crosshair
+        isDrawing = true; 
+      }
+    });
+
+		canvas.addEventListener('mousedown', (event) => {
+      if (isDrawing || isErasing) {
+        lastX = event.offsetX;
+        lastY = event.offsetY;
+        isDown = true;
+
+        // Start a new path
+        drawnPaths.push({
+          type: isErasing ? 'eraser' : 'brush',
+          points: [],
+          lineWidth: brushSize,
+        });
+      }
+		});
+
+    canvas.addEventListener('mouseup', () => {
+      isDown = false;
+    });
+
+		canvas.addEventListener('mousemove', (event) => {
+      if ((isDrawing || isErasing) && isDown) {
+        const x = event.offsetX;
+        const y = event.offsetY;
+        context.beginPath();
+        context.moveTo(lastX, lastY);
+        context.lineTo(x, y);
+        if (isErasing) {
+          context.globalCompositeOperation = 'destination-out';
+        } else {
+          context.globalCompositeOperation = 'source-over';
+        }
+        context.strokeStyle = isDrawing ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+        context.lineWidth = brushSize;
+        context.stroke();
+        context.beginPath();
+        context.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
+        context.fillStyle = isDrawing ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+        context.fill();
+
+        // Add the point to the current path
+        const currentPath = drawnPaths[drawnPaths.length - 1];
+        currentPath.points.push({ fromX: lastX, fromY: lastY, toX: x, toY: y });
+        
+        lastX = x;
+        lastY = y;
+      }
+    });
+
+    const undoPathButton = document.getElementById('undo-path');
+
+    undoPathButton.addEventListener('click', () => {
+      if (drawnPaths.length > 0) {
+        // Remove the last path from the array
+        const lastPath = drawnPaths.pop();
+        console.log(lastPath)
+
+        if (lastPath.type === 'magic') {
+          // "http://lambda-shi1.ini.usc.edu:8080/undo"
+          fetch("http://127.0.0.1:8080/undo", {
+              method: "POST",
+          })
+          .then((response) => response.json())
+          .then((data) => {
+              console.log("Success:", data);
+          })
+          .catch((error) => {
+              console.error("Error:", error);
+          }).finally(() => {
+              // // Hide the spinner
+              // spinnerContainer.classList.add("d-none");
+          });
+        }
+
+        // Clear the canvas
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Redraw the remaining paths
+        for (const path of drawnPaths) {
+          if (path.type === "magic") {
+            const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const data = canvasData.data;
+
+            for (let i = 0; i < path.points.length; i += 1) {
+              data[path.points[i]] = replacementColor.r; // red
+              data[path.points[i]+1] = replacementColor.g; // green
+              data[path.points[i]+2] = replacementColor.b; // blue
+              data[path.points[i]+3] = 255; // alpha
+            }
+            context.putImageData(canvasData, 0, 0);
+
+          } else {
+            context.lineWidth = path.lineWidth;
+            for (const point of path.points) {
+              context.beginPath();
+              context.moveTo(point.fromX, point.fromY);
+              context.lineTo(point.toX, point.toY);
+              if (path.type === "eraser") {
+                context.globalCompositeOperation = 'destination-out';
+              } else {
+                context.globalCompositeOperation = 'source-over';
+              }
+              context.strokeStyle = path.type === "brush" ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+              context.stroke();
+              context.beginPath();
+              context.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
+              context.fillStyle = path.type === "brush" ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+              context.fill();
+            }
+          }
+        }
+      }
+    });
+
+
+    // magic tool ----------------------------------------------------------------
+    function getPixelIndex(x, y, width) {
+      return (y * width + x) * 4;
+    }
+
+    function getColorDifference(color1, color2) {
+      return Math.abs(color1.r - color2.r) + Math.abs(color1.g - color2.g) + Math.abs(color1.b - color2.b);
+    }
+
+    function floodFill(x, y, targetColor, replacementColor, tolerance, imageWidth, imageHeight, pixelData, pixels) {
+      const stack = [[x, y]];
+      const visited = new Set();
+
+      while (stack.length > 0) {
+        const [currentX, currentY] = stack.pop();
+        const key = `${currentX},${currentY}`;
+
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        if (currentX < 0 || currentX >= imageWidth || currentY < 0 || currentY >= imageHeight) continue;
+
+        const index = getPixelIndex(currentX, currentY, imageWidth);
+        const currentColor = {
+          r: pixelData[index],
+          g: pixelData[index + 1],
+          b: pixelData[index + 2],
+        };
+
+        if (getColorDifference(currentColor, targetColor) <= tolerance) {
+          pixels.push(index);
+          pixelData[index] = replacementColor.r;
+          pixelData[index + 1] = replacementColor.g;
+          pixelData[index + 2] = replacementColor.b;
+
+          stack.push([currentX - 1, currentY]);
+          stack.push([currentX + 1, currentY]);
+          stack.push([currentX, currentY - 1]);
+          stack.push([currentX, currentY + 1]);
+        }
+      }
+    }
+
+    magicToolButton.addEventListener("click", (event) => {
+      stopDrawing();
+      stopErasing();
+
+      if (!isMagicToolActive) {
+        canvas.style.cursor = "crosshair";
+        canvas.addEventListener("mousedown", magicToolHandler);
+        isMagicToolActive = true;
+      } else {
+        canvas.style.cursor = "auto";
+        canvas.removeEventListener("mousedown", magicToolHandler);
+        isMagicToolActive = false;
+      }
+    });
+
+    // save images ----------------------------------------------------------------
+    const saveImagesButton = document.getElementById('save-images');
+
+    saveImagesButton.addEventListener('click', () => {
+      // Save the original sized image
+      const tmp_canvas = document.createElement('canvas');
+      tmp_canvas.width = originalUnresizedImageData.width;
+      tmp_canvas.height = originalUnresizedImageData.height;
+
+      const ctx = tmp_canvas.getContext('2d');
+      ctx.putImageData(originalUnresizedImageData, 0, 0);
+      const DataUrl = tmp_canvas.toDataURL('image/png');
+      const ImageLink = document.createElement('a');
+      ImageLink.href = DataUrl;
+      ImageLink.download = 'original_image.png';
+      ImageLink.click();
+
+      // Save the mask image
+      const mask_canvas = document.createElement('canvas');
+      mask_canvas.width = originalUnresizedImageData.width;
+      mask_canvas.height = originalUnresizedImageData.height;
+
+      const mask_ctx = mask_canvas.getContext('2d');
+      // this can resize the image automatically
+      mask_ctx.drawImage(canvas, scaledX, scaledY, scaledWidth, scaledHeight, 
+                                  0, 0, originalUnresizedImageData.width, originalUnresizedImageData.height);
+      // change to binary mask
+      const maskdata = mask_ctx.getImageData(0, 0, mask_canvas.width, mask_canvas.height);
+
+      const maskDataUrl = mask_canvas.toDataURL('image/png');
+      const maskLink = document.createElement('a');
+      maskLink.href = maskDataUrl;
+      maskLink.download = 'mask.png';
+      maskLink.click();
+    });
+
+
+    // eraser tool ----------------------------------------------------------------
+    const eraserButton = document.getElementById('eraser');
+
+    eraserButton.addEventListener('click', (event) => {
+      stopDrawing();
+      stopMagicDrawing();
+
+      // stop erase drawing
+      if (isErasing) {
+        canvas.style.cursor = 'auto';
+        isErasing = false;
+      }
+      // start erase
+      else {
+        canvas.style.cursor = `crosshair`; // change cursor to a crosshair
+        isErasing = true; 
+      }
+    });
+
+	</script>
+
+</body>
+
+</html>
