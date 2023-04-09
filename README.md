@@ -1,9 +1,16 @@
 # SegDrawer
 Simple static web-based mask drawer, supporting semantic drawing with Segment Anything Model (SAM).
 
-<center>
-  <img src="demo.gif" width="400"/>
-</center>
+<table>
+  <tr>
+    <td align="center">
+      <img src="demo.gif" width="400" />
+    </td>
+    <td align="center">
+      <img src="demo1.gif" width="400" />
+    </td>
+  </tr>
+</table>
 
 # Tools
 
