@@ -43,7 +43,7 @@
       height: 100%;
     }
 
-    #image-canvas {
+    #image-canvas, #temp-canvas {
       position: absolute;
       width: 100%;
       height: 100%;
@@ -115,10 +115,12 @@
 	<div id="canvas-wrapper">
 	  <canvas id="canvas"></canvas>
     <canvas id="image-canvas"></canvas>
+    <canvas id="temp-canvas" style="pointer-events: none;"></canvas>
 	  <div class="button-wrapper">
 	  	<button class="button" id="remove-image"><i class="fas fa-times"></i></button>
       <button class="button" id="draw-mask"><i class="fas fa-pencil"></i></button>
       <button class="button" id="magic-tool"><i class="fas fa-wand-magic-sparkles"></i></button>
+      <button class="button" id="draw-rect"><i class="fas fa-shapes"></i></button>
       <button class="button" id="undo-path"><i class="fas fa-undo"></i></button>
       <button class="button" id="eraser"><i class="fa-solid fa-eraser"></i></button>
       <button class="button" id="save-images"><i class="fas fa-download"></i></button>
@@ -158,13 +160,11 @@
     
     // Magic tool functionality
     const tolerance = 30;
-    const replacementColor = { r: 0, g: 0, b: 0 };
+    const replacementColor = { r: 147, g: 112, b: 219 };
+    const alpha_255 = 191.25;
+    const alpha_1 = 0.75;
 
-    function magicToolHandler(event) {
-      if (!isMagicToolActive) return;
-      console.log("magic tool handler")
-
-      // step 1: get starting point
+    function getEventLocationInOriImage(event) {
       let x = event.offsetX;
       let y = event.offsetY;
 
@@ -184,6 +184,36 @@
       x = Math.round(x);
       y = Math.round(y);
 
+      return { x, y };
+    }
+
+    function getXYLocationInOriImage(x, y) {
+      const scaleFactor = Math.min(canvas.width / originalUnresizedImageData.width, canvas.height / originalUnresizedImageData.height);
+      const scaledWidth = originalUnresizedImageData.width * scaleFactor;
+      const scaledHeight = originalUnresizedImageData.height * scaleFactor;
+
+      const delta_x = (canvas.width - scaledWidth) / 2;
+      const delta_y = (canvas.height - scaledHeight) / 2;
+
+      x -= delta_x;
+      y -= delta_y;
+
+      x /= scaleFactor;
+      y /= scaleFactor;
+
+      x = Math.round(x);
+      y = Math.round(y);
+
+      return { x, y };
+    }
+
+    function magicToolHandler(event) {
+      if (!isMagicToolActive) return;
+      console.log("magic tool handler")
+
+      // step 1: get starting point
+      const { x, y } = getEventLocationInOriImage(event);
+
       // step 2: get image data for flood fill
       const imageWidth = imageCanvas.width;
       const imageHeight = imageCanvas.height;
@@ -193,16 +223,15 @@
       // // Save the previous image state
       // const prevImageData = new ImageData(new Uint8ClampedArray(pixelData), imageWidth, imageHeight);
 
-      // step 3: get the start point index/color and do flood fill
-      const targetIndex = getPixelIndex(x, y, imageWidth);
-      const targetColor = {
-        r: pixelData[targetIndex],
-        g: pixelData[targetIndex + 1],
-        b: pixelData[targetIndex + 2],
-      };
+      // // step 3: get the start point index/color and do flood fill
+      // const targetIndex = getPixelIndex(x, y, imageWidth);
+      // const targetColor = {
+      //   r: pixelData[targetIndex],
+      //   g: pixelData[targetIndex + 1],
+      //   b: pixelData[targetIndex + 2],
+      // };
       
-      // floodFill(x, y, targetColor, replacementColor, tolerance, imageWidth, imageHeight, pixelData, pixels);
-      let mask = null;
+      // let mask = null;
 
       const formData = new FormData();
       formData.append("x", x);
@@ -257,7 +286,7 @@
               data[pixels[i]] = replacementColor.r; // red
               data[pixels[i] + 1] = replacementColor.g; // green
               data[pixels[i] + 2] = replacementColor.b; // blue
-              data[pixels[i] + 3] = 255; // alpha
+              data[pixels[i] + 3] = alpha_255; // alpha
             }
             context.putImageData(canvasData, 0, 0);
 
@@ -284,11 +313,17 @@
     const imageCanvas = document.getElementById('image-canvas');
     const imageContext = imageCanvas.getContext('2d');
     imageCanvas.style.zIndex = -1;
+    // for rect real-time visualization
+    const tempCanvas = document.getElementById('temp-canvas');
+    const tempContext = tempCanvas.getContext('2d');
+    tempCanvas.style.zIndex = 1;
 
     canvas.width = 500;
     canvas.height = 500;
 		imageCanvas.width = 500;
 		imageCanvas.height = 500;
+    tempCanvas.width = 500;
+    tempCanvas.height = 500;
     // for saving mask purpose
     let scaledWidth = -1;
     let scaledHeight = -1;
@@ -301,6 +336,10 @@
     const drawnPaths = [];
     // for magic tool
     let isMagicToolActive = false;
+    // for draw rect
+    let isDrawingRect = false;
+    let rectStartX = 0;
+    let rectStartY = 0;
     // for eraser
     let isErasing = false;
     // for draw mask, keep track of whether user is currently drawing
@@ -315,6 +354,7 @@
 		const drawMaskButton = document.getElementById('draw-mask');
     const magicToolButton = document.getElementById('magic-tool');
     const fileInputWrapper = document.getElementById('file-input-wrapper');
+    const drawRectButton = document.getElementById('draw-rect');
 
     function stopDrawing() {
       canvas.style.cursor = "auto";
@@ -339,13 +379,38 @@
       isErasing = false;
     }
 
-    function hideFileInput() {
-    		fileInputWrapper.style.display = 'none';
-    	}
+    function stopRecting() {
+      canvas.style.cursor = "auto";
+      // stop draw recting
+      isDrawingRect = false;
+    }
 
-    	function showFileInput() {
-    		fileInputWrapper.style.display = 'block';
-    	}
+    function hideFileInput() {
+      fileInputWrapper.style.display = 'none';
+    }
+
+    function showFileInput() {
+      fileInputWrapper.style.display = 'block';
+    }
+
+
+    // Add event listener for the draw-rect button
+    drawRectButton.addEventListener('click', () => {
+      // stop any other drawing
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      // stop drawing
+      if (isDrawingRect) {
+        canvas.style.cursor = 'auto';
+        isDrawingRect = false;
+      }
+      // start drawing
+      else {
+        canvas.style.cursor = `crosshair`; // change cursor to a crosshair
+        isDrawingRect = true; 
+      }
+    });
 
 		fileInput.addEventListener('change', (event) => {
 		  const file = event.target.files[0];
@@ -413,6 +478,7 @@
       stopDrawing();
       stopErasing();
       stopMagicDrawing();
+      stopRecting();
       
       while (drawnPaths.length > 0) {
         drawnPaths.pop();
@@ -432,6 +498,7 @@
 		drawMaskButton.addEventListener('click', (event) => {
       stopMagicDrawing();
       stopErasing();
+      stopRecting();
       // toggle slider visibility
       sliderWrapper.style.display = (sliderWrapper.style.display == 'none') ? 'block' : 'none';
       // stop drawing
@@ -458,10 +525,102 @@
           points: [],
           lineWidth: brushSize,
         });
+      } else if (isDrawingRect) {
+        rectStartX = event.offsetX;
+        rectStartY = event.offsetY;
+        isDown = true;
       }
 		});
 
     canvas.addEventListener('mouseup', () => {
+      if (isDrawingRect && isDown) {
+        // Clear the temporary canvas
+        tempContext.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // context.beginPath();
+        // context.rect(rectStartX, rectStartY, rectEndX - rectStartX, rectEndY - rectStartY);
+        // context.strokeStyle = 'rgba(147, 112, 219, 1)';
+        // context.lineWidth = 2;
+        // context.stroke();
+
+        // get start and end points of the rect
+        const {x: startX, y: startY} = getXYLocationInOriImage(rectStartX, rectStartY);
+        const {x: endX, y: endY} = getXYLocationInOriImage(event.offsetX, event.offsetY);
+        console.log(rectStartX, rectStartY, event.offsetX, event.offsetY);
+        console.log(startX, startY, endX, endY);
+        const formData = new FormData();
+        formData.append("start_x", startX);
+        formData.append("start_y", startY);
+        formData.append("end_x", endX);
+        formData.append("end_y", endY);
+        // Send a POST request to the server API
+        fetch("http://127.0.0.1:8080/rect", {
+            method: "POST",
+            body: formData,
+        })
+        .then((response) => response.json())
+        .then((data) => {
+            // console.log("Success:", data.masks);
+            let pixels = [];
+
+            // Get the base64-encoded image strings from the JSON response
+            const maskBase64 = data.masks;
+            const maskImage = new Image();
+            maskImage.src = `data:image/png;base64,${maskBase64}`;
+            maskImage.onload = function() {
+              // Create a canvas element and draw the image onto it
+              const tmpcanvas = document.createElement('canvas');
+              tmpcanvas.width = canvas.width;
+              tmpcanvas.height = canvas.height;
+              const tmpcontext = tmpcanvas.getContext('2d');
+
+              const scaleFactor = Math.min(tmpcanvas.width / maskImage.width, tmpcanvas.height / maskImage.height);
+              const scaledWidth = maskImage.width * scaleFactor;
+              const scaledHeight = maskImage.height * scaleFactor;
+
+              const x = (canvas.width - scaledWidth) / 2;
+              const y = (canvas.height - scaledHeight) / 2;
+
+              tmpcontext.drawImage(maskImage, x, y, scaledWidth, scaledHeight);
+
+              // Get the image data from the canvas
+              const imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+              const pixelData = imageData.data;
+
+              console.log(pixelData.length)
+              // Get the pixel indices of the mask
+              for (let i = 0; i < pixelData.length; i += 4) {
+                if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+                  pixels.push(i);
+                }
+              }
+              console.log(pixels.length)
+              // step 4: put magic mask on canvas
+              const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+              const data = canvasData.data;
+              console.log(data.length)
+              for (let i = 0; i < pixels.length; i += 1) {
+                data[pixels[i]] = replacementColor.r; // red
+                data[pixels[i] + 1] = replacementColor.g; // green
+                data[pixels[i] + 2] = replacementColor.b; // blue
+                data[pixels[i] + 3] = alpha_255; // alpha
+              }
+              context.putImageData(canvasData, 0, 0);
+
+              // step 5: Add the rect mask to drawnPaths array
+              drawnPaths.push({
+                points: pixels,
+                type: "rect",
+              });
+            };
+        })
+        .catch((error) => {
+            console.error("Error:", error);
+        }).finally(() => {
+            // // Hide the spinner
+            // spinnerContainer.classList.add("d-none");
+        });
+      }
       isDown = false;
     });
 
@@ -477,12 +636,12 @@
         } else {
           context.globalCompositeOperation = 'source-over';
         }
-        context.strokeStyle = isDrawing ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+        context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
         context.lineWidth = brushSize;
         context.stroke();
         context.beginPath();
         context.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
-        context.fillStyle = isDrawing ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+        context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
         context.fill();
 
         // Add the point to the current path
@@ -491,6 +650,19 @@
         
         lastX = x;
         lastY = y;
+      } else if (isDrawingRect && isDown) {
+        const x = event.offsetX;
+        const y = event.offsetY;
+
+        // Clear the temporary canvas
+        tempContext.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Draw the rectangle on the temporary canvas
+        tempContext.beginPath();
+        tempContext.rect(rectStartX, rectStartY, x - rectStartX, y - rectStartY);
+        tempContext.strokeStyle = 'rgba(147, 112, 219, 1)';
+        tempContext.lineWidth = 2;
+        tempContext.stroke();
       }
     });
 
@@ -524,7 +696,7 @@
 
         // Redraw the remaining paths
         for (const path of drawnPaths) {
-          if (path.type === "magic") {
+          if (path.type === "magic" || path.type === "rect") {
             const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
             const data = canvasData.data;
 
@@ -532,7 +704,7 @@
               data[path.points[i]] = replacementColor.r; // red
               data[path.points[i]+1] = replacementColor.g; // green
               data[path.points[i]+2] = replacementColor.b; // blue
-              data[path.points[i]+3] = 255; // alpha
+              data[path.points[i]+3] = alpha_255; // alpha
             }
             context.putImageData(canvasData, 0, 0);
 
@@ -547,11 +719,11 @@
               } else {
                 context.globalCompositeOperation = 'source-over';
               }
-              context.strokeStyle = path.type === "brush" ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+              context.strokeStyle = path.type === "brush" ? 'rgba(147, 112, 219, 1)' : 'rgba(147, 112, 219, 1)';
               context.stroke();
               context.beginPath();
               context.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
-              context.fillStyle = path.type === "brush" ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 1)';
+              context.fillStyle = path.type === "brush" ? 'rgba(147, 112, 219, 1)' : 'rgba(147, 112, 219, 1)';
               context.fill();
             }
           }
@@ -561,51 +733,18 @@
 
 
     // magic tool ----------------------------------------------------------------
-    function getPixelIndex(x, y, width) {
-      return (y * width + x) * 4;
-    }
+    // function getPixelIndex(x, y, width) {
+    //   return (y * width + x) * 4;
+    // }
 
-    function getColorDifference(color1, color2) {
-      return Math.abs(color1.r - color2.r) + Math.abs(color1.g - color2.g) + Math.abs(color1.b - color2.b);
-    }
-
-    function floodFill(x, y, targetColor, replacementColor, tolerance, imageWidth, imageHeight, pixelData, pixels) {
-      const stack = [[x, y]];
-      const visited = new Set();
-
-      while (stack.length > 0) {
-        const [currentX, currentY] = stack.pop();
-        const key = `${currentX},${currentY}`;
-
-        if (visited.has(key)) continue;
-        visited.add(key);
-
-        if (currentX < 0 || currentX >= imageWidth || currentY < 0 || currentY >= imageHeight) continue;
-
-        const index = getPixelIndex(currentX, currentY, imageWidth);
-        const currentColor = {
-          r: pixelData[index],
-          g: pixelData[index + 1],
-          b: pixelData[index + 2],
-        };
-
-        if (getColorDifference(currentColor, targetColor) <= tolerance) {
-          pixels.push(index);
-          pixelData[index] = replacementColor.r;
-          pixelData[index + 1] = replacementColor.g;
-          pixelData[index + 2] = replacementColor.b;
-
-          stack.push([currentX - 1, currentY]);
-          stack.push([currentX + 1, currentY]);
-          stack.push([currentX, currentY - 1]);
-          stack.push([currentX, currentY + 1]);
-        }
-      }
-    }
+    // function getColorDifference(color1, color2) {
+    //   return Math.abs(color1.r - color2.r) + Math.abs(color1.g - color2.g) + Math.abs(color1.b - color2.b);
+    // }
 
     magicToolButton.addEventListener("click", (event) => {
       stopDrawing();
       stopErasing();
+      stopRecting();
 
       if (!isMagicToolActive) {
         canvas.style.cursor = "crosshair";
@@ -661,6 +800,7 @@
     eraserButton.addEventListener('click', (event) => {
       stopDrawing();
       stopMagicDrawing();
+      stopRecting();
 
       // stop erase drawing
       if (isErasing) {
