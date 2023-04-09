@@ -17,7 +17,8 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
 From top to bottom
 - Clear image
 - Drawer
-- SAM segmenter (Need backend)
+- SAM point-segmenter (Need backend)
+- SAM rect-segmenter (Need backend)
 - Undo
 - Eraser
 - Download
