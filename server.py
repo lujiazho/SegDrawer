@@ -118,5 +118,31 @@ async def click_images(
         status_code=200,
     )
 
+@app.post("/rect")
+async def rect_images(
+    start_x: int = Form(...), # horizontal
+    start_y: int = Form(...), # vertical
+    end_x: int = Form(...), # horizontal
+    end_y: int = Form(...)  # vertical
+):
+    masks_, _, _ = predictor.predict(
+        point_coords=None,
+        point_labels=None,
+        box=np.array([[start_x, start_y, end_x, end_y]]),
+        multimask_output=False
+    )
+    
+    res = Image.fromarray(masks_[0])
+    # res.save("res.png")
+
+    # Return a JSON response
+    return JSONResponse(
+        content={
+            "masks": pil_image_to_base64(res),
+            "message": "Images processed successfully"
+        },
+        status_code=200,
+    )
+
 import uvicorn
 uvicorn.run(app, host="127.0.0.1", port=8080)
