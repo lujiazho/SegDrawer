@@ -43,7 +43,7 @@ python server.py
 ```
 - Go to Browser
 ```
-http://127.0.0.1:8080
+http://127.0.0.1:8000
 ```
 
 For configuring CPU/GPU and model, just change the code in server.py
