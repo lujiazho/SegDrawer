@@ -55,4 +55,4 @@ device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 
 # Run on Colab
 
-Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing)
+Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing). Need tp register an ngrok account and copy your token to replace "{your_token}".
