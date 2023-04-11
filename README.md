@@ -4,10 +4,13 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
 <table>
   <tr>
     <td align="center">
-      <img src="demo.gif" width="300" />
+      <img src="demo.gif" width="250" />
     </td>
     <td align="center">
-      <img src="demo1.gif" width="300" />
+      <img src="demo1.gif" width="250" />
+    </td>
+    <td align="center">
+      <img src="demo2.gif" width="250" />
     </td>
   </tr>
 </table>
@@ -19,6 +22,7 @@ From top to bottom
 - Drawer
 - SAM point-segmenter (Need backend)
 - SAM rect-segmenter (Need backend)
+- SAM Seg-Everything (Need backend)
 - Undo
 - Eraser
 - Download
@@ -27,7 +31,7 @@ From top to bottom
 
 If don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
 
-If use SAM segmenter, do following steps
+If use SAM segmenter, do following steps (CPU can be time-consuming)
 - Download models as mentioned in [segment-anything](https://github.com/facebookresearch/segment-anything).
 For example
 ```
