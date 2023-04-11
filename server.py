@@ -23,6 +23,7 @@ print("Loading model")
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
 print("Finishing loading")
 predictor = SamPredictor(sam)
+mask_generator = SamAutomaticMaskGenerator(sam)
 
 app = FastAPI(debug=True)
 app.add_middleware(
@@ -38,11 +39,14 @@ input_label = []
 masks = []
 mask_input = [None]
 
+GLOBAL_IMAGE = None
+GLOBAL_MASK = None
+
 @app.post("/image")
 async def process_images(
     image: UploadFile = File(...)
 ):
-    global input_point, input_label, mask_input, masks
+    global input_point, input_label, mask_input, masks, GLOBAL_IMAGE, GLOBAL_MASK
     input_point = []
     input_label = []
     masks = []
@@ -54,8 +58,10 @@ async def process_images(
     image_data = BytesIO(image_data)
     img = np.array(Image.open(image_data))
     print("get image", img.shape)
+    GLOBAL_IMAGE = img[:,:,:-1]
+    GLOBAL_MASK = None
     # produce an image embedding by calling SamPredictor.set_image
-    predictor.set_image(img[:,:,:-1])
+    predictor.set_image(GLOBAL_IMAGE)
     print("finish setting image")
     # Return a JSON response
     return JSONResponse(
@@ -67,7 +73,7 @@ async def process_images(
 
 
 @app.post("/undo")
-async def process_images():
+async def undo_mask():
     global input_point, input_label, mask_input
     input_point.pop()
     input_label.pop()
@@ -133,12 +139,58 @@ async def rect_images(
     )
     
     res = Image.fromarray(masks_[0])
+    print(masks_[0].shape)
     # res.save("res.png")
 
     # Return a JSON response
     return JSONResponse(
         content={
             "masks": pil_image_to_base64(res),
+            "message": "Images processed successfully"
+        },
+        status_code=200,
+    )
+
+@app.post("/everything")
+async def seg_everything():
+    """
+        segmentation : the mask
+        area : the area of the mask in pixels
+        bbox : the boundary box of the mask in XYWH format
+        predicted_iou : the model's own prediction for the quality of the mask
+        point_coords : the sampled input point that generated this mask
+        stability_score : an additional measure of mask quality
+        crop_box : the crop of the image used to generate this mask in XYWH format
+    """
+    global GLOBAL_IMAGE, GLOBAL_MASK
+    if type(GLOBAL_MASK) != type(None):
+        return JSONResponse(
+            content={
+                "masks": pil_image_to_base64(GLOBAL_MASK),
+                "message": "Images processed successfully"
+            },
+            status_code=200,
+        )
+
+
+    masks = mask_generator.generate(GLOBAL_IMAGE)
+    assert len(masks) > 0, "No masks found"
+
+    sorted_anns = sorted(masks, key=(lambda x: x['area']), reverse=True)
+    print(len(sorted_anns))
+
+    # Create a new image with the same size as the original image
+    img = np.zeros((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1]), dtype=np.uint8)
+    for idx, ann in enumerate(sorted_anns, 0):
+        img[ann['segmentation']] = idx % 255 + 1 # color can only be in range [1, 255]
+    
+    res = Image.fromarray(img)
+    GLOBAL_MASK = res
+
+    # Return a JSON response
+    return JSONResponse(
+        content={
+            "masks": pil_image_to_base64(GLOBAL_MASK),
             "message": "Images processed successfully"
         },
         status_code=200,
