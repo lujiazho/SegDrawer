@@ -15,9 +15,17 @@ def pil_image_to_base64(image):
     img_str = b64encode(buffered.getvalue()).decode("utf-8")
     return img_str
 
+def read_content(file_path: str) -> str:
+    """read the content of target file
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    return content
+
 sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
 model_type = "vit_l" # "vit_l" or "vit_h"
-device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 
 print("Loading model")
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
@@ -196,5 +204,13 @@ async def seg_everything():
         status_code=200,
     )
 
+@app.get("/assets/{path}/{file_name}", response_class=FileResponse)
+async def read_assets(path, file_name):
+    return f"assets/{path}/{file_name}"
+
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    return read_content('segDrawer.html')
+
 import uvicorn
-uvicorn.run(app, host="127.0.0.1", port=8080)
+uvicorn.run(app, host="0.0.0.0", port=8080)
