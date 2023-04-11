@@ -41,10 +41,14 @@ wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 ```
 python server.py
 ```
+- Go to Browser
+```
+http://127.0.0.1:8080
+```
 
-For configuring GPU and model, just change the code in server.py
+For configuring CPU/GPU and model, just change the code in server.py
 ```
 sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
 model_type = "vit_l" # "vit_l" or "vit_h"
-device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 ```
