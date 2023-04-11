@@ -213,4 +213,4 @@ async def read_index():
     return read_content('segDrawer.html')
 
 import uvicorn
-uvicorn.run(app, host="0.0.0.0", port=8080)
+uvicorn.run(app, host="0.0.0.0", port=8000)
