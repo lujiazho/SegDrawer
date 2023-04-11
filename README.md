@@ -4,13 +4,13 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
 <table>
   <tr>
     <td align="center">
-      <img src="demo.gif" width="250" />
+      <img src="demo.gif" width="240" />
     </td>
     <td align="center">
-      <img src="demo1.gif" width="250" />
+      <img src="demo1.gif" width="240" />
     </td>
     <td align="center">
-      <img src="demo2.gif" width="250" />
+      <img src="demo2.gif" width="240" />
     </td>
   </tr>
 </table>
