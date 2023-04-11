@@ -724,7 +724,7 @@
         console.log(lastPath)
 
         if (lastPath.type === 'magic') {
-	  fetch("/undo", {
+          fetch("/undo", {
               method: "POST",
           })
           .then((response) => response.json())
