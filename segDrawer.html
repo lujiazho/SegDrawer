@@ -286,7 +286,7 @@
       formData.append("x", x);
       formData.append("y", y);
       // Send a POST request to the server API
-      fetch("http://127.0.0.1:8080/click", {
+      fetch("http://127.0.0.1:8000/click", {
           method: "POST",
           body: formData,
       })
@@ -502,7 +502,7 @@
 
         const formData = new FormData();
         formData.append("image", new Blob([imageByteArray]), "image.png");
-        fetch("http://127.0.0.1:8080/image", {
+        fetch("http://127.0.0.1:8000/image", {
             method: "POST",
             body: formData,
         })
@@ -603,7 +603,7 @@
         formData.append("end_x", endX);
         formData.append("end_y", endY);
         // Send a POST request to the server API
-        fetch("http://127.0.0.1:8080/rect", {
+        fetch("http://127.0.0.1:8000/rect", {
             method: "POST",
             body: formData,
         })
@@ -724,8 +724,8 @@
         console.log(lastPath)
 
         if (lastPath.type === 'magic') {
-          // "http://lambda-shi1.ini.usc.edu:8080/undo"
-          fetch("http://127.0.0.1:8080/undo", {
+          // "http://lambda-shi1.ini.usc.edu:8000/undo"
+          fetch("http://127.0.0.1:8000/undo", {
               method: "POST",
           })
           .then((response) => response.json())
@@ -915,7 +915,7 @@
       toggleSparkles(true);
 
       // Send the image data to the server
-      fetch('http://127.0.0.1:8080/everything', {
+      fetch('http://127.0.0.1:8000/everything', {
         method: 'POST'
       })
       .then((response) => response.json())
