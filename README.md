@@ -27,7 +27,7 @@ From top to bottom
 - Eraser
 - Download
 
-# Run
+# Run Locally
 
 If don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
 
@@ -52,3 +52,7 @@ sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4
 model_type = "vit_l" # "vit_l" or "vit_h"
 device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 ```
+
+# Run on Colab
+
+Follow this [Colab example](SegDrawer.ipynb)
