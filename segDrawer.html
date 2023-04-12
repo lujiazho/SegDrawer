@@ -355,6 +355,8 @@
     }
 
 		const fileInput = document.getElementById('file-input');
+    let zipfileBase64 = null;
+    let imageName = "original_image";
     // for drawer
 		const canvas = document.getElementById('canvas');
 		const context = canvas.getContext('2d');
@@ -463,6 +465,11 @@
 
 		fileInput.addEventListener('change', (event) => {
 		  const file = event.target.files[0];
+      zipfileBase64 = null;
+
+      // Extract and store the uploaded image name
+      imageName = file.name.split('.')[0];
+      console.log(imageName)
 
       const image = new Image();
 		  image.onload = async () => {
@@ -835,7 +842,7 @@
       const DataUrl = tmp_canvas.toDataURL('image/png');
       const ImageLink = document.createElement('a');
       ImageLink.href = DataUrl;
-      ImageLink.download = 'original_image.png';
+      ImageLink.download = imageName + '.png';
       ImageLink.click();
 
       // Save the mask image
@@ -853,8 +860,35 @@
       const maskDataUrl = mask_canvas.toDataURL('image/png');
       const maskLink = document.createElement('a');
       maskLink.href = maskDataUrl;
-      maskLink.download = 'mask.png';
+      maskLink.download = imageName + '_mask.png';
       maskLink.click();
+
+      // save the zip file
+      if (zipfileBase64 != null) {
+        // Decode the base64-encoded data to binary data
+        const zipData = atob(zipfileBase64);
+
+        // Convert the decoded data to a Uint8Array
+        const byteArray = new Uint8Array(zipData.length);
+        for (let i = 0; i < zipData.length; i++) {
+          byteArray[i] = zipData.charCodeAt(i);
+        }
+
+        // Create a Blob from the byteArray
+        const blob = new Blob([byteArray], { type: "application/zip" });
+
+        // Create an anchor element with a download attribute and trigger a click event to download the zip file
+        const zipLink = document.createElement('a');
+        zipLink.href = URL.createObjectURL(blob);
+        zipLink.download = imageName + '.zip';
+        zipLink.click();
+
+        // Remove the anchor element after the download is triggered
+        setTimeout(() => {
+          URL.revokeObjectURL(zipLink.href);
+          zipLink.remove();
+        }, 0);
+      }
     });
 
 
@@ -921,6 +955,8 @@
       .then((data) => {
         // Get the base64-encoded image strings from the JSON response
         const maskBase64 = data.masks;
+        zipfileBase64 = data.zipfile;
+
         const maskImage = new Image();
         maskImage.src = `data:image/png;base64,${maskBase64}`;
         maskImage.onload = function() {

@@ -4,6 +4,8 @@ from starlette.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry, SamPredictor
+
+import zipfile
 import numpy as np
 from io import BytesIO
 from PIL import Image
@@ -49,12 +51,15 @@ mask_input = [None]
 
 GLOBAL_IMAGE = None
 GLOBAL_MASK = None
+GLOBAL_ZIPBUFFER = None
 
 @app.post("/image")
 async def process_images(
     image: UploadFile = File(...)
 ):
-    global input_point, input_label, mask_input, masks, GLOBAL_IMAGE, GLOBAL_MASK
+    global input_point, input_label, mask_input, masks
+    global GLOBAL_IMAGE, GLOBAL_MASK, GLOBAL_ZIPBUFFER
+
     input_point = []
     input_label = []
     masks = []
@@ -68,6 +73,7 @@ async def process_images(
     print("get image", img.shape)
     GLOBAL_IMAGE = img[:,:,:-1]
     GLOBAL_MASK = None
+    GLOBAL_ZIPBUFFER = None
     # produce an image embedding by calling SamPredictor.set_image
     predictor.set_image(GLOBAL_IMAGE)
     print("finish setting image")
@@ -170,11 +176,12 @@ async def seg_everything():
         stability_score : an additional measure of mask quality
         crop_box : the crop of the image used to generate this mask in XYWH format
     """
-    global GLOBAL_IMAGE, GLOBAL_MASK
+    global GLOBAL_IMAGE, GLOBAL_MASK, GLOBAL_ZIPBUFFER
     if type(GLOBAL_MASK) != type(None):
         return JSONResponse(
             content={
                 "masks": pil_image_to_base64(GLOBAL_MASK),
+                "zipfile": b64encode(GLOBAL_ZIPBUFFER.getvalue()).decode("utf-8"),
                 "message": "Images processed successfully"
             },
             status_code=200,
@@ -195,10 +202,26 @@ async def seg_everything():
     res = Image.fromarray(img)
     GLOBAL_MASK = res
 
+    # Save the original image, mask, and cropped segments to a zip file in memory
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # Cut out the segmented regions as smaller squares
+        for idx, ann in enumerate(sorted_anns, 0):
+            cropped = GLOBAL_IMAGE.crop(ann["bbox"])
+            cropped_bytes = BytesIO()
+            cropped.save(cropped_bytes, format="PNG")
+            cropped_bytes.seek(0)
+            zip_file.writestr(f"seg_{idx}.png", cropped_bytes.read())
+
+    # move the file pointer to the beginning of the file so we can read whole file
+    zip_buffer.seek(0)
+    GLOBAL_ZIPBUFFER = zip_buffer
+
     # Return a JSON response
     return JSONResponse(
         content={
             "masks": pil_image_to_base64(GLOBAL_MASK),
+            "zipfile": b64encode(GLOBAL_ZIPBUFFER.getvalue()).decode("utf-8"),
             "message": "Images processed successfully"
         },
         status_code=200,
