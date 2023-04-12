@@ -27,6 +27,19 @@ From top to bottom
 - Eraser
 - Download
 
+After Seg-Everything, the downloaded files would include .zip file.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="example/dog.jpg" width="360" />
+    </td>
+    <td align="center">
+      <img src="example/cut-off.jpg" width="360" />
+    </td>
+  </tr>
+</table>
+
 # Run Locally
 
 If don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
