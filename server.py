@@ -204,14 +204,28 @@ async def seg_everything():
 
     # Save the original image, mask, and cropped segments to a zip file in memory
     zip_buffer = BytesIO()
+    PIL_GLOBAL_IMAGE = Image.fromarray(GLOBAL_IMAGE)
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         # Cut out the segmented regions as smaller squares
         for idx, ann in enumerate(sorted_anns, 0):
-            cropped = GLOBAL_IMAGE.crop(ann["bbox"])
-            cropped_bytes = BytesIO()
-            cropped.save(cropped_bytes, format="PNG")
-            cropped_bytes.seek(0)
-            zip_file.writestr(f"seg_{idx}.png", cropped_bytes.read())
+            left, top, right, bottom = ann["bbox"][0], ann["bbox"][1], ann["bbox"][0] + ann["bbox"][2], ann["bbox"][1] + ann["bbox"][3]
+            cropped = PIL_GLOBAL_IMAGE.crop((left, top, right, bottom))
+
+            # Create a transparent image with the same size as the cropped image
+            transparent = Image.new("RGBA", cropped.size, (0, 0, 0, 0))
+
+            # Create a mask from the segmentation data and crop it
+            mask = Image.fromarray(ann["segmentation"].astype(np.uint8) * 255)
+            mask_cropped = mask.crop((left, top, right, bottom))
+
+            # Combine the cropped image with the transparent image using the mask
+            result = Image.composite(cropped.convert("RGBA"), transparent, mask_cropped)
+
+            # Save the result to the zip file
+            result_bytes = BytesIO()
+            result.save(result_bytes, format="PNG")
+            result_bytes.seek(0)
+            zip_file.writestr(f"seg_{idx}.png", result_bytes.read())
 
     # move the file pointer to the beginning of the file so we can read whole file
     zip_buffer.seek(0)
