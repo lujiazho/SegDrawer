@@ -27,7 +27,7 @@ From top to bottom
 - Eraser
 - Download
 
-After Seg-Everything, the downloaded files would include .zip file.
+After Seg-Everything, the downloaded files would include .zip file, which contains all cut-offs.
 
 <table>
   <tr>
