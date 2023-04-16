@@ -50,7 +50,7 @@ For example
 ```
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 ```
-- Download dependencies for [SAM](https://github.com/facebookresearch/segment-anything):
+- Download dependencies for [SAM](https://github.com/facebookresearch/segment-anything) and server:
 ```
   pip install git+https://github.com/facebookresearch/segment-anything.git
   pip install -r requirements.txt
