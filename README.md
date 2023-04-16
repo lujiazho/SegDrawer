@@ -50,6 +50,9 @@ For example
 ```
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 ```
+- Download dependencies:
+Download [SAM](https://github.com/facebookresearch/segment-anything): pip install git+https://github.com/facebookresearch/segment-anything.git
+Download other dependencies: pip install -r requirements.txt
 - Launch backend
 ```
 python server.py
