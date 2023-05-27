@@ -205,6 +205,10 @@
         </div>
 
         <script type="text/javascript">
+            document.addEventListener('contextmenu', function(event) {
+                event.preventDefault(); // Prevent the default context menu from appearing
+            });
+
             async function canvasToBlob(canvas) {
                 return new Promise((resolve, reject) => {
                     canvas.toBlob((blob) => {
@@ -300,6 +304,7 @@
 
                 // step 1: get starting point
                 const { x, y } = getEventLocationInOriImage(event);
+                drawPromptPointOnClick(event, canvas);
 
                 // step 2: get image data for flood fill
                 const imageWidth = imageCanvas.width;
@@ -335,75 +340,24 @@
                 })
                     .then((response) => response.json())
                     .then((data) => {
-                        // console.log("Success:", data.masks);
-                        let pixels = [];
-
                         // Get the base64-encoded image strings from the JSON response
                         const maskBase64 = data.masks;
                         const maskImage = new Image();
                         maskImage.src = `data:image/png;base64,${maskBase64}`;
                         maskImage.onload = function () {
                             // Create a canvas element and draw the image onto it
-                            const tmpcanvas = document.createElement("canvas");
-                            tmpcanvas.width = canvas.width;
-                            tmpcanvas.height = canvas.height;
-                            const tmpcontext = tmpcanvas.getContext("2d");
-
-                            const scaleFactor = Math.min(
-                                tmpcanvas.width / maskImage.width,
-                                tmpcanvas.height / maskImage.height
-                            );
-                            const scaledWidth = maskImage.width * scaleFactor;
-                            const scaledHeight = maskImage.height * scaleFactor;
-
-                            const x = (canvas.width - scaledWidth) / 2;
-                            const y = (canvas.height - scaledHeight) / 2;
-
-                            tmpcontext.drawImage(
+                            const tmpCanvas = fitImageOnSize(
                                 maskImage,
-                                x,
-                                y,
-                                scaledWidth,
-                                scaledHeight
-                            );
-
-                            // Get the image data from the canvas
-                            const imageData = tmpcontext.getImageData(
-                                0,
-                                0,
-                                tmpcanvas.width,
-                                tmpcanvas.height
-                            );
-                            const pixelData = imageData.data;
-
-                            console.log(pixelData.length);
-                            // Get the pixel indices of the mask
-                            for (let i = 0; i < pixelData.length; i += 4) {
-                                if (
-                                    pixelData[i] == 255 &&
-                                    pixelData[i + 1] == 255 &&
-                                    pixelData[i + 2] == 255
-                                ) {
-                                    pixels.push(i);
-                                }
-                            }
-                            console.log(pixels.length);
-                            // step 4: put magic mask on canvas
-                            const canvasData = context.getImageData(
-                                0,
-                                0,
                                 canvas.width,
                                 canvas.height
                             );
-                            const data = canvasData.data;
-                            console.log(data.length);
-                            for (let i = 0; i < pixels.length; i += 1) {
-                                data[pixels[i]] = replacementColor.r; // red
-                                data[pixels[i] + 1] = replacementColor.g; // green
-                                data[pixels[i] + 2] = replacementColor.b; // blue
-                                data[pixels[i] + 3] = alpha_255; // alpha
-                            }
-                            context.putImageData(canvasData, 0, 0);
+
+                            // Get the image data from the canvas
+                            const pixels = getDataFromCanvas(tmpCanvas);
+                            console.log(pixels.length);
+
+                            // step 4: put magic mask on canvas
+                            putDataOnCanvas(canvas, pixels);
 
                             // step 5: Add the magic mask to drawnPaths array
                             drawnPaths.push({
@@ -419,6 +373,97 @@
                         // // Hide the spinner
                         // spinnerContainer.classList.add("d-none");
                     });
+            }
+
+            function drawPromptPointOnClick(event, canvas) {
+                const x = event.offsetX;
+                const y = event.offsetY;
+
+                const fillColor = `rgba(147, 112, 219, 0.75)`;
+                const strokeColor = (event.which == 1) ? `green` : `red`;
+
+                const context = canvas.getContext("2d");
+
+                context.beginPath();
+                context.arc(x, y, 3, 0, Math.PI*2);
+                context.fillStyle = fillColor;
+                context.fill();
+                context.strokeStyle = strokeColor;
+                context.stroke();
+            }
+
+            function putDataOnCanvas(thisCanvas, pixels) {
+                const thisContext = thisCanvas.getContext("2d");
+                const canvasData = thisContext.getImageData(
+                    0,
+                    0,
+                    thisCanvas.width,
+                    thisCanvas.height
+                );
+                const data = canvasData.data;
+
+                for (let i = 0; i < pixels.length; i += 1) {
+                    data[pixels[i]] = replacementColor.r; // red
+                    data[pixels[i] + 1] = replacementColor.g; // green
+                    data[pixels[i] + 2] = replacementColor.b; // blue
+                    data[pixels[i] + 3] = alpha_255; // alpha
+                }
+                thisContext.putImageData(canvasData, 0, 0);
+            }
+
+            function fitImageOnSize(image, width, height) {
+                const targetCanvas = document.createElement("canvas");
+                targetCanvas.width = width;
+                targetCanvas.height = height;
+                const targetContext = targetCanvas.getContext("2d");
+
+                const scaleFactor = Math.min(
+                    targetCanvas.width / image.width,
+                    targetCanvas.height / image.height
+                );
+                const scaledWidth =
+                    image.width * scaleFactor;
+                const scaledHeight =
+                    image.height * scaleFactor;
+
+                const x = (canvas.width - scaledWidth) / 2;
+                const y = (canvas.height - scaledHeight) / 2;
+
+                targetContext.drawImage(
+                    image,
+                    x,
+                    y,
+                    scaledWidth,
+                    scaledHeight
+                );
+
+                return targetCanvas;
+            }
+
+            function getDataFromCanvas(thisCanvas) {
+                const thisContext = thisCanvas.getContext("2d");
+                const imageData = thisContext.getImageData(
+                    0,
+                    0,
+                    thisCanvas.width,
+                    thisCanvas.height
+                );
+                const pixelData = imageData.data;
+
+                let pixels = [];
+                console.log(pixelData.length);
+                // Get the pixel indices of the mask
+                for (let i = 0; i < pixelData.length; i += 4) {
+                    if (
+                        pixelData[i] == 255 &&
+                        pixelData[i + 1] == 255 &&
+                        pixelData[i + 2] == 255
+                    ) {
+                        pixels.push(i);
+                    }
+                }
+
+                return pixels;
             }
 
             const fileInput = document.getElementById("file-input");
@@ -906,21 +951,7 @@
                     // Redraw the remaining paths
                     for (const path of drawnPaths) {
                         if (path.type === "magic" || path.type === "rect") {
-                            const canvasData = context.getImageData(
-                                0,
-                                0,
-                                canvas.width,
-                                canvas.height
-                            );
-                            const data = canvasData.data;
-
-                            for (let i = 0; i < path.points.length; i += 1) {
-                                data[path.points[i]] = replacementColor.r; // red
-                                data[path.points[i] + 1] = replacementColor.g; // green
-                                data[path.points[i] + 2] = replacementColor.b; // blue
-                                data[path.points[i] + 3] = alpha_255; // alpha
-                            }
-                            context.putImageData(canvasData, 0, 0);
+                            putDataOnCanvas(canvas, path.points);
                         } else if (path.type === "everything") {
                             console.log("everything");
                             const canvasData = context.getImageData(
