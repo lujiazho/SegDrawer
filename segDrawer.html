@@ -304,7 +304,11 @@
 
                 // step 1: get starting point
                 const { x, y } = getEventLocationInOriImage(event);
-                drawPromptPointOnClick(event, canvas);
+                promptPoints.push({
+                    type: (event.which == 1) ? true : false,
+                    origPoint: [event.offsetX, event.offsetY],
+                    scaledPoint: [x, y],
+                });
 
                 // step 2: get image data for flood fill
                 const imageWidth = imageCanvas.width;
@@ -331,8 +335,20 @@
                 // let mask = null;
 
                 const formData = new FormData();
-                formData.append("x", x);
-                formData.append("y", y);
+                // formData.append("x", x);
+                // formData.append("y", y);
+                const typeList = [];
+                const xList = [];
+                const yList = [];
+                for (const thisPrompt of promptPoints) {
+                    typeList.push((thisPrompt.type)?1:0);
+                    xList.push(thisPrompt.scaledPoint[0]);
+                    yList.push(thisPrompt.scaledPoint[1]);
+                }
+                formData.append("type", typeList);
+                formData.append("x", xList);
+                formData.append("y", yList);
+
                 // Send a POST request to the server API
                 fetch("/click", {
                     method: "POST",
@@ -357,13 +373,15 @@
                             console.log(pixels.length);
 
                             // step 4: put magic mask on canvas
+                            redrawPaths();
                             putDataOnCanvas(canvas, pixels);
 
+                            for (const thisPrompt of promptPoints) {
+                                drawPromptPointOnClick(thisPrompt, canvas);
+                            }
+
                             // step 5: Add the magic mask to drawnPaths array
-                            drawnPaths.push({
-                                points: pixels,
-                                type: "magic",
-                            });
+                            interactivePaths.push(pixels);
                         };
                     })
                     .catch((error) => {
@@ -375,12 +393,12 @@
                     });
             }
 
-            function drawPromptPointOnClick(event, canvas) {
-                const x = event.offsetX;
-                const y = event.offsetY;
+            function drawPromptPointOnClick(thisPrompt, canvas) {
+                let x = thisPrompt.origPoint[0];
+                let y = thisPrompt.origPoint[1];
 
                 const fillColor = `rgba(147, 112, 219, 0.75)`;
-                const strokeColor = (event.which == 1) ? `green` : `red`;
+                const strokeColor = (thisPrompt.type) ? `green` : `red`;
 
                 const context = canvas.getContext("2d");
 
@@ -495,6 +513,11 @@
 
             let originalUnresizedImageData;
             let originalImageDataBackup;
+
+            // Prompt points in magic tool
+            const promptPoints = [];
+            const interactivePaths = [];
+
             // Add a new array to store drawn paths
             const drawnPaths = [];
             // for magic tool
@@ -536,6 +559,18 @@
                     console.log(error); // do nothing
                 }
                 isMagicToolActive = false;
+
+                if (interactivePaths.length != 0) {
+                    const lastPath = interactivePaths.pop();
+                    promptPoints.splice(0);
+                    interactivePaths.splice(0);
+
+                    drawnPaths.push({
+                        points: lastPath,
+                        type: "magic",
+                    });
+                    redrawPaths();
+                }
             }
             function stopErasing() {
                 canvas.style.cursor = "auto";
@@ -923,84 +958,108 @@
             const undoPathButton = document.getElementById("undo-path");
 
             undoPathButton.addEventListener("click", () => {
-                if (drawnPaths.length > 0) {
+                if (promptPoints.length > 0) {
+                    const lastPoint = promptPoints.pop();
+                    const lastPath = interactivePaths.pop();
+
+                    redrawPaths();
+
+                    const curLen = interactivePaths.length;
+                    putDataOnCanvas(canvas, interactivePaths[curLen-1]);
+
+                    for (const thisPrompt of promptPoints) {
+                        drawPromptPointOnClick(thisPrompt, canvas);
+                    }
+
+                } else if (drawnPaths.length > 0) {
                     // Remove the last path from the array
                     const lastPath = drawnPaths.pop();
                     console.log(lastPath);
 
                     if (lastPath.type === "magic") {
-                        fetch("/undo", {
-                            method: "POST",
-                        })
-                            .then((response) => response.json())
-                            .then((data) => {
-                                console.log("Success:", data);
-                            })
-                            .catch((error) => {
-                                console.error("Error:", error);
-                            })
-                            .finally(() => {
-                                // // Hide the spinner
-                                // spinnerContainer.classList.add("d-none");
-                            });
+                        sendUndoRequest();
                     }
 
-                    // Clear the canvas
-                    context.clearRect(0, 0, canvas.width, canvas.height);
+                    redrawPaths();
+                }
+                else {
 
-                    // Redraw the remaining paths
-                    for (const path of drawnPaths) {
-                        if (path.type === "magic" || path.type === "rect") {
-                            putDataOnCanvas(canvas, path.points);
-                        } else if (path.type === "everything") {
-                            console.log("everything");
-                            const canvasData = context.getImageData(
+                }
+            });
+
+            function sendUndoRequest() {
+                fetch("/undo", {
+                    method: "POST",
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        console.log("Success:", data);
+                    })
+                    .catch((error) => {
+                        console.error("Error:", error);
+                    })
+                    .finally(() => {
+                        // // Hide the spinner
+                        // spinnerContainer.classList.add("d-none");
+                    });
+            }
+
+            function redrawPaths() {
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                for (const path of drawnPaths) {
+                    if (path.type === "magic" || path.type === "rect") {
+                        putDataOnCanvas(canvas, path.points);
+                    }
+                    else if (path.type === "everything") {
+                        console.log("everything");
+                        const canvasData = context.getImageData(
+                            0,
+                            0,
+                            canvas.width,
+                            canvas.height
+                        );
+                        const data = canvasData.data;
+
+                        for (let i = 0; i < path.masks.length; i += 4) {
+                            if (path.masks[i] > 0) {
+                                data[i] = random_color[path.masks[i]].r; // red
+                                data[i + 1] = random_color[path.masks[i]].g; // green
+                                data[i + 2] = random_color[path.masks[i]].b; // blue
+                                data[i + 3] = alpha_255; // alpha
+                            }
+                        }
+                        context.putImageData(canvasData, 0, 0);
+                    }
+                    else {
+                        context.lineWidth = path.lineWidth;
+                        for (const point of path.points) {
+                            context.beginPath();
+                            context.moveTo(point.fromX, point.fromY);
+                            context.lineTo(point.toX, point.toY);
+                            if (path.type === "eraser") {
+                                context.globalCompositeOperation =
+                                    "destination-out";
+                            } else {
+                                context.globalCompositeOperation =
+                                    "source-over";
+                            }
+                            context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+                            context.stroke();
+                            context.beginPath();
+                            context.arc(
+                                point.toX,
+                                point.toY,
+                                path.lineWidth / 2,
                                 0,
-                                0,
-                                canvas.width,
-                                canvas.height
+                                2 * Math.PI
                             );
-                            const data = canvasData.data;
-
-                            for (let i = 0; i < path.masks.length; i += 4) {
-                                if (path.masks[i] > 0) {
-                                    data[i] = random_color[path.masks[i]].r; // red
-                                    data[i + 1] = random_color[path.masks[i]].g; // green
-                                    data[i + 2] = random_color[path.masks[i]].b; // blue
-                                    data[i + 3] = alpha_255; // alpha
-                                }
-                            }
-                            context.putImageData(canvasData, 0, 0);
-                        } else {
-                            context.lineWidth = path.lineWidth;
-                            for (const point of path.points) {
-                                context.beginPath();
-                                context.moveTo(point.fromX, point.fromY);
-                                context.lineTo(point.toX, point.toY);
-                                if (path.type === "eraser") {
-                                    context.globalCompositeOperation =
-                                        "destination-out";
-                                } else {
-                                    context.globalCompositeOperation =
-                                        "source-over";
-                                }
-                                context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
-                                context.stroke();
-                                context.beginPath();
-                                context.arc(
-                                    point.toX,
-                                    point.toY,
-                                    path.lineWidth / 2,
-                                    0,
-                                    2 * Math.PI
-                                );
-                                context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
-                                context.fill();
-                            }
+                            context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+                            context.fill();
                         }
                     }
                 }
-            });
+            }
 
             // magic tool ----------------------------------------------------------------
             // function getPixelIndex(x, y, width) {
@@ -1020,10 +1079,9 @@
                     canvas.style.cursor = "crosshair";
                     canvas.addEventListener("mousedown", magicToolHandler);
                     isMagicToolActive = true;
-                } else {
-                    canvas.style.cursor = "auto";
-                    canvas.removeEventListener("mousedown", magicToolHandler);
-                    isMagicToolActive = false;
+                }
+                else {
+                    stopMagicDrawing();
                 }
             });
 
