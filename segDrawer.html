@@ -205,7 +205,7 @@
         </div>
 
         <script type="text/javascript">
-            document.addEventListener('contextmenu', function(event) {
+            document.addEventListener("contextmenu", function (event) {
                 event.preventDefault(); // Prevent the default context menu from appearing
             });
 
@@ -305,7 +305,7 @@
                 // step 1: get starting point
                 const { x, y } = getEventLocationInOriImage(event);
                 promptPoints.push({
-                    type: (event.which == 1) ? true : false,
+                    type: event.which == 1 ? true : false,
                     origPoint: [event.offsetX, event.offsetY],
                     scaledPoint: [x, y],
                 });
@@ -335,19 +335,16 @@
                 // let mask = null;
 
                 const formData = new FormData();
-                // formData.append("x", x);
-                // formData.append("y", y);
                 const typeList = [];
-                const xList = [];
-                const yList = [];
+                const clickList = [];
+
                 for (const thisPrompt of promptPoints) {
-                    typeList.push((thisPrompt.type)?1:0);
-                    xList.push(thisPrompt.scaledPoint[0]);
-                    yList.push(thisPrompt.scaledPoint[1]);
+                    typeList.push(thisPrompt.type ? 1 : 0);
+                    clickList.push(thisPrompt.scaledPoint[0]);
+                    clickList.push(thisPrompt.scaledPoint[1]);
                 }
                 formData.append("type", typeList);
-                formData.append("x", xList);
-                formData.append("y", yList);
+                formData.append("click_list", clickList);
 
                 // Send a POST request to the server API
                 fetch("/click", {
@@ -397,13 +394,13 @@
                 let x = thisPrompt.origPoint[0];
                 let y = thisPrompt.origPoint[1];
 
-                const fillColor = `rgba(147, 112, 219, 0.75)`;
-                const strokeColor = (thisPrompt.type) ? `green` : `red`;
+                const fillColor = `rgba(255, 255, 255, 0.75)`;
+                const strokeColor = thisPrompt.type ? `green` : `red`;
 
                 const context = canvas.getContext("2d");
 
                 context.beginPath();
-                context.arc(x, y, 3, 0, Math.PI*2);
+                context.arc(x, y, 3, 0, Math.PI * 2);
                 context.fillStyle = fillColor;
                 context.fill();
                 context.strokeStyle = strokeColor;
@@ -439,21 +436,13 @@
                     targetCanvas.width / image.width,
                     targetCanvas.height / image.height
                 );
-                const scaledWidth =
-                    image.width * scaleFactor;
-                const scaledHeight =
-                    image.height * scaleFactor;
+                const scaledWidth = image.width * scaleFactor;
+                const scaledHeight = image.height * scaleFactor;
 
                 const x = (canvas.width - scaledWidth) / 2;
                 const y = (canvas.height - scaledHeight) / 2;
 
-                targetContext.drawImage(
-                    image,
-                    x,
-                    y,
-                    scaledWidth,
-                    scaledHeight
-                );
+                targetContext.drawImage(image, x, y, scaledWidth, scaledHeight);
 
                 return targetCanvas;
             }
@@ -561,6 +550,7 @@
                 isMagicToolActive = false;
 
                 if (interactivePaths.length != 0) {
+                    const mask_idx = interactivePaths.length - 1;
                     const lastPath = interactivePaths.pop();
                     promptPoints.splice(0);
                     interactivePaths.splice(0);
@@ -570,6 +560,24 @@
                         type: "magic",
                     });
                     redrawPaths();
+
+                    const formData = new FormData();
+                    formData.append("mask_idx", mask_idx);
+                    fetch("/finish_click", {
+                        method: "POST",
+                        body: formData,
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            console.log("Success:", data);
+                        })
+                        .catch((error) => {
+                            console.error("Error:", error);
+                        })
+                        .finally(() => {
+                            // // Hide the spinner
+                            // spinnerContainer.classList.add("d-none");
+                        });
                 }
             }
             function stopErasing() {
@@ -965,12 +973,13 @@
                     redrawPaths();
 
                     const curLen = interactivePaths.length;
-                    putDataOnCanvas(canvas, interactivePaths[curLen-1]);
+                    if (curLen > 0) {
+                        putDataOnCanvas(canvas, interactivePaths[curLen - 1]);
+                    }
 
                     for (const thisPrompt of promptPoints) {
                         drawPromptPointOnClick(thisPrompt, canvas);
                     }
-
                 } else if (drawnPaths.length > 0) {
                     // Remove the last path from the array
                     const lastPath = drawnPaths.pop();
@@ -981,9 +990,7 @@
                     }
 
                     redrawPaths();
-                }
-                else {
-
+                } else {
                 }
             });
 
@@ -1010,8 +1017,7 @@
                 for (const path of drawnPaths) {
                     if (path.type === "magic" || path.type === "rect") {
                         putDataOnCanvas(canvas, path.points);
-                    }
-                    else if (path.type === "everything") {
+                    } else if (path.type === "everything") {
                         console.log("everything");
                         const canvasData = context.getImageData(
                             0,
@@ -1030,8 +1036,7 @@
                             }
                         }
                         context.putImageData(canvasData, 0, 0);
-                    }
-                    else {
+                    } else {
                         context.lineWidth = path.lineWidth;
                         for (const point of path.points) {
                             context.beginPath();
@@ -1079,8 +1084,7 @@
                     canvas.style.cursor = "crosshair";
                     canvas.addEventListener("mousedown", magicToolHandler);
                     isMagicToolActive = true;
-                }
-                else {
+                } else {
                     stopMagicDrawing();
                 }
             });

@@ -46,7 +46,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-masks = []
+segmented_mask = []
+interactive_mask = []
 mask_input = None
 
 GLOBAL_IMAGE = None
@@ -57,13 +58,13 @@ GLOBAL_ZIPBUFFER = None
 async def process_images(
     image: UploadFile = File(...)
 ):
-    global mask_input, masks
+    global segmented_mask, interactive_mask
     global GLOBAL_IMAGE, GLOBAL_MASK, GLOBAL_ZIPBUFFER
     import os
     cache_path = "./embedding_cached.pt"
 
-    masks = []
-    # mask_input = [None]
+    segmented_mask = []
+    interactive_mask = []
 
     # Read the image and mask data as bytes
     image_data = await image.read()
@@ -96,9 +97,8 @@ async def process_images(
 
 @app.post("/undo")
 async def undo_mask():
-    global mask_input
-    masks.pop()
-    # mask_input.pop()
+    global segmented_mask
+    segmented_mask.pop()
 
     return JSONResponse(
         content={
@@ -115,14 +115,15 @@ from fastapi import Request
 async def click_images(
     request: Request,
 ):  
-    global mask_input
+    global mask_input, interactive_mask
 
     form_data = await request.form()
     type_list = [int(i) for i in form_data.get("type").split(',')]
-    x_list = [int(i) for i in form_data.get("x").split(',')]
-    y_list = [int(i) for i in form_data.get("y").split(',')]
+    click_list = [int(i) for i in form_data.get("click_list").split(',')]
+    # x_list = [int(i) for i in form_data.get("x").split(',')]
+    # y_list = [int(i) for i in form_data.get("y").split(',')]
 
-    point_coords = np.array([x_list, y_list], np.float32).T
+    point_coords = np.array(click_list, np.float32).reshape(-1, 2)
     point_labels = np.array(type_list).reshape(-1)
 
     print(point_coords)
@@ -138,14 +139,19 @@ async def click_images(
         multimask_output=True,
     )
 
-    # masks.append(masks_[np.argmax(scores_), :, :])
     best_idx = np.argmax(scores_)
     res = masks_[best_idx]
     mask_input = logits_[best_idx][None, :, :]
 
-    res = Image.fromarray(res)
+    len_prompt = len(point_labels)
+    len_mask = len(interactive_mask)
+    if len_mask == 0 or len_mask < len_prompt:
+        interactive_mask.append(res)
+    else:
+        interactive_mask[len_prompt-1] = res
 
     # Return a JSON response
+    res = Image.fromarray(res)
     return JSONResponse(
         content={
             "masks": pil_image_to_base64(res),
@@ -153,6 +159,23 @@ async def click_images(
         },
         status_code=200,
     )
+
+@app.post("/finish_click")
+async def finish_interactive_click(
+    mask_idx: int = Form(...),
+):
+    global segmented_mask, interactive_mask
+
+    segmented_mask.append(interactive_mask[mask_idx])
+    interactive_mask = list()
+
+    return JSONResponse(
+        content={
+            "message": "Finish successfully",
+        },
+        status_code=200,
+    )
+    
 
 @app.post("/rect")
 async def rect_images(
