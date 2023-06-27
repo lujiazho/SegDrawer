@@ -83,10 +83,11 @@ Note: you may not want to draw the segmentation map manually with the tool `Draw
 If don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
 
 If use SAM segmenter, do following steps (CPU can be time-consuming)
-- Download models as mentioned in [segment-anything](https://github.com/facebookresearch/segment-anything).
+- Download models as mentioned in [segment-anything](https://github.com/facebookresearch/segment-anything) and [XMem](https://github.com/hkchengrex/XMem).
 For example
 ```
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
+wget -P ./XMem/saves/ https://github.com/hkchengrex/XMem/releases/download/v1.0/XMem.pth
 ```
 - Launch backend
 ```
