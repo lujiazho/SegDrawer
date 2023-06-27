@@ -185,6 +185,8 @@ def seg_propagation(video_name, mask_name):
     fps = cap.get(cv2.CAP_PROP_FPS)
 
     output_dir = f'./XMem/output/{video_name.split("/")[-1].split(".")[0]}.mp4'
+    if not os.path.exists('./XMem/output/'):
+        os.mkdir('./XMem/output/')
     clip = ImageSequenceClip(sequence=masked_video, fps=fps)
     # Set the audio of the new video to be the audio from the original video
     clip = clip.set_audio(audio)
