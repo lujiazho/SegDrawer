@@ -1,5 +1,5 @@
 # SegDrawer
-Simple static web-based mask drawer, supporting semantic drawing with Segment Anything Model (SAM).
+Simple static web-based mask drawer, supporting semantic drawing with Segment Anything Model ([SAM](https://github.com/facebookresearch/segment-anything)).
 
 <table>
   <tr>
@@ -15,6 +15,31 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
   </tr>
 </table>
 
+- Video Segmentation with [XMem](https://github.com/hkchengrex/XMem)
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://www.youtube.com/watch?v=fn3KWM1kuAw">original video</a><br>
+      <img src="example/XMem/BostonDynamics_ori.gif" width="300" />
+    </td>
+    <td align="center">
+      first frame<br>
+      <img src="example/XMem/BostonDynamics_frame.png" width="300" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      segmentation<br>
+      <img src="example/XMem/BostonDynamics_mask.png" width="300" />
+    </td>
+    <td align="center">
+      VideoSeg<br>
+      <img src="example/XMem/BostonDynamics_seg.gif" width="300" />
+    </td>
+  </tr>
+</table>
+
 # Tools
 
 From top to bottom
@@ -26,6 +51,7 @@ From top to bottom
 - Undo
 - Eraser
 - Download
+- VideoSeg (Need backend)
 
 After Seg-Everything, the downloaded files would include .zip file, which contains all cut-offs.
 
@@ -39,6 +65,8 @@ After Seg-Everything, the downloaded files would include .zip file, which contai
     </td>
   </tr>
 </table>
+
+For video segmentation, according to [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
 
 # Run Locally
 
