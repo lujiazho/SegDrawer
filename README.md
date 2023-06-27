@@ -53,7 +53,7 @@ From top to bottom
 - Download
 - VideoSeg (Need backend)
 
-After Seg-Everything, the downloaded files would include .zip file, which contains all cut-offs.
+After **Seg-Everything**, the downloaded files would include .zip file, which contains all cut-offs.
 
 <table>
   <tr>
@@ -66,7 +66,17 @@ After Seg-Everything, the downloaded files would include .zip file, which contai
   </tr>
 </table>
 
-For video segmentation, according to [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
+For **Video Segmentation**, according to [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
+
+Note: you may not want to draw the segmentation map manually with the tool `Drawer`, which leads to non-single color paints especially on the edge as shown below. This is not good for XMem video segmentation. For more details please refer to the original paper.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="example/drawer.png" width="360" />
+    </td>
+  </tr>
+</table>
 
 # Run Locally
 
