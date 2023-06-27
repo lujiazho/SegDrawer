@@ -1,11 +1,17 @@
 from fastapi import FastAPI, status, File, Form, UploadFile
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from starlette.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import HTTPException
 
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry, SamPredictor
 
+import os
+import cv2
+import time
+import torch
 import zipfile
+import tempfile
 import numpy as np
 from io import BytesIO
 from PIL import Image
@@ -27,7 +33,13 @@ def read_content(file_path: str) -> str:
 
 sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
 model_type = "vit_l" # "vit_l" or "vit_h"
-device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
+if torch.cuda.is_available():
+    print('Using GPU')
+    device = 'cuda'
+else:
+    print('CUDA not available. Please connect to a GPU instance if possible.')
+    device = 'cpu'
 
 print("Loading model")
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
@@ -43,6 +55,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Define a palette for video segmentation
+import random
+palette = [random.randint(0, 255) for _ in range(256*3)]
 
 input_point = []
 input_label = []
@@ -85,6 +101,156 @@ async def process_images(
         status_code=200,
     )
 
+from XMem import XMem, InferenceCore, image_to_torch, index_numpy_to_one_hot_torch, torch_prob_to_numpy_mask, overlay_davis
+
+torch.set_grad_enabled(False)
+
+def seg_propagation(video_name, mask_name):
+    # default configuration
+    config = {
+        'top_k': 30,
+        'mem_every': 5,
+        'deep_update_every': -1,
+        'enable_long_term': True,
+        'enable_long_term_count_usage': True,
+        'num_prototypes': 128,
+        'min_mid_term_frames': 5,
+        'max_mid_term_frames': 10,
+        'max_long_term_elements': 10000,
+    }
+
+    network = XMem(config, './XMem/saves/XMem.pth').eval().to(device)
+
+    im = Image.open(mask_name).convert('L')
+    im.putpalette(palette)
+    mask = np.array(im)
+    acc = 0
+    for i in range(256):
+        if np.sum(mask==i) == 0:
+            acc += 1
+            mask[mask==i] -= acc-1
+        else:
+            mask[mask==i] -= acc
+    print(np.unique(mask))
+    num_objects = len(np.unique(mask)) - 1
+
+    st = time.time()
+    # torch.cuda.empty_cache()
+
+    processor = InferenceCore(network, config=config)
+    processor.set_all_labels(range(1, num_objects+1)) # consecutive labels
+    cap = cv2.VideoCapture(video_name)
+
+    # You can change these two numbers
+    frames_to_propagate = 1500
+    visualize_every = 1
+
+    current_frame_index = 0
+
+    masked_video = []
+
+    with torch.cuda.amp.autocast(enabled=True):
+        while (cap.isOpened()):
+            # load frame-by-frame
+            _, frame = cap.read()
+            if frame is None or current_frame_index > frames_to_propagate:
+                break
+
+            # convert numpy array to pytorch tensor format
+            frame_torch, _ = image_to_torch(frame, device=device)
+            if current_frame_index == 0:
+                # initialize with the mask
+                mask_torch = index_numpy_to_one_hot_torch(mask, num_objects+1).to(device)
+                # the background mask is not fed into the model
+                prediction = processor.step(frame_torch, mask_torch[1:])
+            else:
+                # propagate only
+                prediction = processor.step(frame_torch)
+
+            # argmax, convert to numpy
+            prediction = torch_prob_to_numpy_mask(prediction)
+
+            if current_frame_index % visualize_every == 0:
+                visualization = overlay_davis(frame[...,::-1], prediction)
+                masked_video.append(visualization)
+
+            current_frame_index += 1
+    ed = time.time()
+
+    print(f"Propagation time: {ed-st} s")
+
+    from moviepy.editor import ImageSequenceClip, AudioFileClip
+    
+    audio = AudioFileClip(video_name)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    output_dir = f'./XMem/output/{video_name.split("/")[-1].split(".")[0]}.mp4'
+    clip = ImageSequenceClip(sequence=masked_video, fps=fps)
+    # Set the audio of the new video to be the audio from the original video
+    clip = clip.set_audio(audio)
+    clip.write_videofile(output_dir, fps=fps, audio=True)
+
+    return output_dir
+
+VIDEO_NAME = ""
+
+@app.post("/video")
+async def obtain_videos(
+    video: UploadFile = File(...)
+):
+    # Read the video data as bytes
+    video_data = await video.read()
+
+    # Write the video data to a temporary file
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    temp_file.write(video_data)
+    temp_file.close()
+
+    print(temp_file.name)
+
+    global VIDEO_NAME
+    if VIDEO_NAME != "":
+        os.unlink(VIDEO_NAME)
+    VIDEO_NAME = temp_file.name
+
+    return JSONResponse(
+        content={
+            "message": "upload video successfully",
+        },
+        status_code=200,
+    )
+
+@app.post("/ini_seg")
+async def process_videos(
+    ini_seg: UploadFile = File(...)
+):
+    global VIDEO_NAME
+
+    ini_seg_data = await ini_seg.read()
+
+    tmp_seg_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    tmp_seg_file.write(ini_seg_data)
+    tmp_seg_file.close()
+
+    print(tmp_seg_file.name)
+
+    if VIDEO_NAME == "":
+        raise HTTPException(status_code=204, detail="No content")
+    
+    res_path = seg_propagation(VIDEO_NAME, tmp_seg_file.name)
+
+    os.unlink(tmp_seg_file.name)
+    # os.unlink(VIDEO_NAME)
+    # VIDEO_NAME = ""
+
+    # Return a FileResponse with the processed video path
+    return FileResponse(
+        res_path,
+        media_type="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="{VIDEO_NAME.split("/")[-1].split(".")[0]}.mp4"',
+        },
+    )
 
 @app.post("/undo")
 async def undo_mask():
@@ -112,7 +278,6 @@ async def click_images(
     print("get click", x, y)
     print("input_point", input_point)
     print("input_label", input_label)
-
     
     masks_, scores_, logits_ = predictor.predict(
         point_coords=np.array([input_point[-1]]),
@@ -153,6 +318,7 @@ async def rect_images(
     )
     
     res = Image.fromarray(masks_[0])
+    # res.save("res.png")
     print(masks_[0].shape)
     # res.save("res.png")
 

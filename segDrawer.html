@@ -161,6 +161,7 @@
       <button class="button" id="undo-path"><i class="fas fa-undo"></i></button>
       <button class="button" id="eraser"><i class="fa-solid fa-eraser"></i></button>
       <button class="button" id="save-images"><i class="fas fa-download"></i></button>
+      <button class="button" id="seg-video"><i class="fa-solid fa-film"></i></button>
 	  </div>
 	  <div id="slider-wrapper">
 		  <input type="range" min="1" max="100" value="50" class="slider" id="brush-size">
@@ -206,26 +207,17 @@
     const tolerance = 30;
     const replacementColor = { r: 147, g: 112, b: 219 };
     const alpha_255 = 191.25;
-    const alpha_1 = 0.75;
+    const alpha_1 = 1; // for manual drawer (avoid color overlay artifact when = 0.75)
     
     const random_color = {};
     for (let i = 1; i <= 255; i++) {
       random_color[i] = randomRGBColor();
     }
 
-    function getEventLocationInOriImage(event) {
-      let x = event.offsetX;
-      let y = event.offsetY;
-
-      const scaleFactor = Math.min(canvas.width / originalUnresizedImageData.width, canvas.height / originalUnresizedImageData.height);
-      const scaledWidth = originalUnresizedImageData.width * scaleFactor;
-      const scaledHeight = originalUnresizedImageData.height * scaleFactor;
-
-      const delta_x = (canvas.width - scaledWidth) / 2;
-      const delta_y = (canvas.height - scaledHeight) / 2;
-
-      x -= delta_x;
-      y -= delta_y;
+    // canvas image xy to original image xy
+    function getXYLocationInOriImage(x, y) {
+      x -= scaledX;
+      y -= scaledY;
 
       x /= scaleFactor;
       y /= scaleFactor;
@@ -236,16 +228,13 @@
       return { x, y };
     }
 
-    function getXYLocationInOriImage(x, y) {
-      const scaleFactor = Math.min(canvas.width / originalUnresizedImageData.width, canvas.height / originalUnresizedImageData.height);
-      const scaledWidth = originalUnresizedImageData.width * scaleFactor;
-      const scaledHeight = originalUnresizedImageData.height * scaleFactor;
+    // canvas idx to original image idx
+    function getIdxLocationInOriImage(idx) {
+      let x = idx % 500;
+      let y = Math.floor(idx / 500);
 
-      const delta_x = (canvas.width - scaledWidth) / 2;
-      const delta_y = (canvas.height - scaledHeight) / 2;
-
-      x -= delta_x;
-      y -= delta_y;
+      x -= scaledX;
+      y -= scaledY;
 
       x /= scaleFactor;
       y /= scaleFactor;
@@ -253,7 +242,108 @@
       x = Math.round(x);
       y = Math.round(y);
 
-      return { x, y };
+      return y * originalUnresizedImageData.width + x;
+    }
+
+    // scaled image idx to original image idx
+    function imgidx2oriidx(idx) {
+      let { x, y } = idx2xy(idx);
+      x /= scaleFactor;
+      y /= scaleFactor;
+      x = Math.round(x);
+      y = Math.round(y);
+      return y * originalUnresizedImageData.width + x;
+    }
+
+    // event location is on canvas, which is different from the original image size
+    function getEventLocationInOriImage(event) {
+      let x = event.offsetX;
+      let y = event.offsetY;
+
+      return getXYLocationInOriImage(x, y);
+    }
+
+    // // scaled image xy to scaled image idx
+    // function xy2idx(x, y) {
+    //   return y * scaledWidth + x;
+    // }
+
+    // // scaled image idx to scaled image xy
+    // function idx2xy(idx) {
+    //   let x = idx % scaledWidth;
+    //   let y = Math.floor(idx / scaledWidth);
+
+    //   return { x, y };
+    // }
+
+    function getImagedataFromImageClass(Image, masktype) {
+      // Create a original size element and draw the image onto it
+      let tmpcanvas = document.createElement('canvas');
+      tmpcanvas.width = originalUnresizedImageData.width;
+      tmpcanvas.height = originalUnresizedImageData.height;
+      let tmpcontext = tmpcanvas.getContext('2d');
+
+      tmpcontext.drawImage(Image, 0, 0);
+
+      // Get the image data from the canvas
+      let imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+      let pixelData = imageData.data;
+
+      const imageMask = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
+      const data = imageMask.data;
+
+      if (masktype == 'everything') {
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] > 0) {
+            data[i] = random_color[pixelData[i]].r; // red
+            data[i + 1] = random_color[pixelData[i]].g; // green
+            data[i + 2] = random_color[pixelData[i]].b; // blue
+            data[i + 3] = alpha_255; // alpha
+          }
+        }
+        maskcontext.putImageData(canvasData, 0, 0);
+
+        oriDrawnPaths.push({
+          masks: pixelData,
+          type: "everything",
+        });
+      } else {
+        let pixels = [];
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+            pixels.push(i);
+          }
+        }
+
+        for (let i = 0; i < pixels.length; i += 1) {
+          data[pixels[i]] = replacementColor.r; // red
+          data[pixels[i] + 1] = replacementColor.g; // green
+          data[pixels[i] + 2] = replacementColor.b; // blue
+          data[pixels[i] + 3] = alpha_255; // alpha
+        }
+        maskcontext.putImageData(imageMask, 0, 0);
+
+        oriDrawnPaths.push({
+          points: pixels,
+          type: masktype === 'magic' ? "magic" : "rect",
+        });
+      }
+
+      // Create a canvas size element and draw the image onto it
+      tmpcanvas = document.createElement('canvas');
+      tmpcanvas.width = canvas.width;
+      tmpcanvas.height = canvas.height;
+      tmpcontext = tmpcanvas.getContext('2d');
+
+      tmpcontext.drawImage(Image, scaledX, scaledY, scaledWidth, scaledHeight);
+
+      // Get the image data from the canvas
+      imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+      pixelData = imageData.data;
+
+      return imageData.data;
     }
 
     function magicToolHandler(event) {
@@ -269,22 +359,10 @@
       const imageData = imageContext.getImageData(0, 0, imageWidth, imageHeight);
       const pixelData = imageData.data;
 
-      // // Save the previous image state
-      // const prevImageData = new ImageData(new Uint8ClampedArray(pixelData), imageWidth, imageHeight);
-
-      // // step 3: get the start point index/color and do flood fill
-      // const targetIndex = getPixelIndex(x, y, imageWidth);
-      // const targetColor = {
-      //   r: pixelData[targetIndex],
-      //   g: pixelData[targetIndex + 1],
-      //   b: pixelData[targetIndex + 2],
-      // };
-      
-      // let mask = null;
-
       const formData = new FormData();
       formData.append("x", x);
       formData.append("y", y);
+      
       // Send a POST request to the server API
       fetch("/click", {
           method: "POST",
@@ -300,24 +378,7 @@
           const maskImage = new Image();
           maskImage.src = `data:image/png;base64,${maskBase64}`;
           maskImage.onload = function() {
-            // Create a canvas element and draw the image onto it
-            const tmpcanvas = document.createElement('canvas');
-            tmpcanvas.width = canvas.width;
-            tmpcanvas.height = canvas.height;
-            const tmpcontext = tmpcanvas.getContext('2d');
-
-            const scaleFactor = Math.min(tmpcanvas.width / maskImage.width, tmpcanvas.height / maskImage.height);
-            const scaledWidth = maskImage.width * scaleFactor;
-            const scaledHeight = maskImage.height * scaleFactor;
-
-            const x = (canvas.width - scaledWidth) / 2;
-            const y = (canvas.height - scaledHeight) / 2;
-
-            tmpcontext.drawImage(maskImage, x, y, scaledWidth, scaledHeight);
-
-            // Get the image data from the canvas
-            const imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
-            const pixelData = imageData.data;
+            const pixelData = getImagedataFromImageClass(maskImage, "magic");
 
             console.log(pixelData.length)
             // Get the pixel indices of the mask
@@ -357,6 +418,7 @@
 		const fileInput = document.getElementById('file-input');
     let zipfileBase64 = null;
     let imageName = "original_image";
+    let videoName = "original_video";
     // for drawer
 		const canvas = document.getElementById('canvas');
 		const context = canvas.getContext('2d');
@@ -368,6 +430,9 @@
     const tempCanvas = document.getElementById('temp-canvas');
     const tempContext = tempCanvas.getContext('2d');
     tempCanvas.style.zIndex = 1;
+    // for image-size mask canvas
+    const maskcanvas = document.createElement('canvas');
+    const maskcontext = maskcanvas.getContext('2d');
 
     canvas.width = 500;
     canvas.height = 500;
@@ -380,11 +445,14 @@
     let scaledHeight = -1;
     let scaledX = -1;
     let scaledY = -1;
+    // global variables for image
+    let scaleFactor = -1;
 
     let originalUnresizedImageData;
-    let originalImageDataBackup;
+    let originalUnresizedMaskData;
     // Add a new array to store drawn paths
     const drawnPaths = [];
+    const oriDrawnPaths = [];
     // for magic tool
     let isMagicToolActive = false;
     // for draw rect
@@ -463,74 +531,154 @@
       }
     });
 
-		fileInput.addEventListener('change', (event) => {
+
+    // for processing video
+    async function getFirstFrameAsBlob(file) {
+        return new Promise((resolve, reject) => {
+          videoName = file.name.split('.')[0];
+          console.log(videoName)
+
+          const video = document.createElement('video');
+          video.preload = 'auto'; // Preload video
+          video.src = URL.createObjectURL(file);
+
+          // Trigger seeked event after metadata loaded
+          video.addEventListener('loadedmetadata', function() {
+              this.currentTime = 0;
+          }, false);
+
+          // Extract first frame when seek operation completes
+          video.addEventListener('seeked', function() {
+              const canvas = document.createElement('canvas');
+              const context = canvas.getContext('2d');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+
+              // Draw the first frame of the video onto the canvas
+              context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+              // Convert the canvas to a blob
+              canvas.toBlob(blob => {
+                  // Convert blob to file
+                  const file = new File([blob], 'frame.png', { type: 'image/png' });
+                  resolve(file);
+              });
+
+              // Remove the video element after capturing the frame
+              video.remove();
+          }, false);
+
+          // When video can be played through, upload to server
+          video.addEventListener('canplaythrough', function() {
+              // Create new FormData instance and append the video file
+              const formData = new FormData();
+              formData.append("video", file);
+
+              // Upload the video file to the server
+              fetch("/video", {
+                  method: "POST",
+                  body: formData,
+              })
+              .then((response) => response.json())
+              .then((data) => {
+                  console.log("Success:", data);
+              })
+              .catch((error) => {
+                  console.error("Error:", error);
+              })
+              .finally(() => {
+                  console.log('finally')
+              });
+          }, false);
+        });
+    }
+
+    // for processing image
+    function handleImage(file) {
+        // Extract and store the uploaded image name
+        imageName = file.name.split('.')[0];
+        console.log(imageName)
+
+        const image = new Image();
+        image.onload = async () => {
+          const spinnerContainer = document.getElementById("spinner-container");
+          const spinnerText = spinnerContainer.querySelector('span');
+          // Change the spinner text
+          spinnerText.textContent = "Preprocessing image...";
+          // Show the spinner
+          spinnerContainer.classList.remove("d-none");
+          
+          // for keeping original sized image
+          const tmp_canvas = document.createElement('canvas');
+          tmp_canvas.width = image.width;
+          tmp_canvas.height = image.height;
+          const ctx = tmp_canvas.getContext('2d');
+          // for keeping original sized mask
+          maskcanvas.width = image.width;
+          maskcanvas.height = image.height;
+
+          ctx.drawImage(image, 0, 0, image.width, image.height);
+          originalUnresizedImageData = ctx.getImageData(0, 0, image.width, image.height);
+
+          scaleFactor = Math.min(imageCanvas.width / image.width, imageCanvas.height / image.height);
+
+          scaledWidth = image.width * scaleFactor;
+          scaledHeight = image.height * scaleFactor;
+
+          scaledX = (imageCanvas.width - scaledWidth) / 2;
+          scaledY = (imageCanvas.height - scaledHeight) / 2;
+
+          // reset width and height can refresh the canvas so that prev image will not be kept
+          imageCanvas.width = 500;
+          imageCanvas.height = 500;
+          imageContext.drawImage(image, scaledX, scaledY, scaledWidth, scaledHeight);
+
+          hideFileInput();
+
+          const imageBlob = await canvasToBlob(tmp_canvas);
+          const imageByteArray = await blobToByteArray(imageBlob);
+
+          const formData = new FormData();
+          formData.append("image", new Blob([imageByteArray]), "image.png");
+          fetch("/image", {
+              method: "POST",
+              body: formData,
+          })
+          .then((response) => response.json())
+          .then((data) => {
+              console.log("Success:", data);
+          })
+          .catch((error) => {
+              console.error("Error:", error);
+          }).finally(() => {
+            // Hide the spinner
+            spinnerContainer.classList.add("d-none");
+            console.log('finally')
+          });
+        };
+        image.src = URL.createObjectURL(file);
+    }
+
+		fileInput.addEventListener('change', async (event) => {
 		  const file = event.target.files[0];
+      const fileType = file.type;
       zipfileBase64 = null;
 
-      // Extract and store the uploaded image name
-      imageName = file.name.split('.')[0];
-      console.log(imageName)
-
-      const image = new Image();
-		  image.onload = async () => {
-        const spinnerContainer = document.getElementById("spinner-container");
-        // Show the spinner
-        spinnerContainer.classList.remove("d-none");
-        
-        // for keeping original sized image
-        const tmp_canvas = document.createElement('canvas');
-        tmp_canvas.width = image.width;
-        tmp_canvas.height = image.height;
-
-        const ctx = tmp_canvas.getContext('2d');
-        ctx.drawImage(image, 0, 0, image.width, image.height);
-        originalUnresizedImageData = ctx.getImageData(0, 0, image.width, image.height);
-
-        // console.log(originalUnresizedImageData)
-        // console.log(imageCanvas.width, imageCanvas.height)
-        // console.log(image.width, image.height)
-		    const widthRatio = imageCanvas.width / image.width;
-		    const heightRatio = imageCanvas.height / image.height;
-		    const scaleFactor = Math.min(widthRatio, heightRatio);
-		    scaledWidth = image.width * scaleFactor;
-		    scaledHeight = image.height * scaleFactor;
-		    scaledX = (imageCanvas.width - scaledWidth) / 2;
-		    scaledY = (imageCanvas.height - scaledHeight) / 2;
-		    // reset width and height can refresh the canvas so that prev image will not be kept
-		    imageCanvas.width = 500;
-        imageCanvas.height = 500;
-		    imageContext.drawImage(image, scaledX, scaledY, scaledWidth, scaledHeight);
-        originalImageDataBackup = imageContext.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
-
-        hideFileInput();
-
-        const imageBlob = await canvasToBlob(tmp_canvas);
-        const imageByteArray = await blobToByteArray(imageBlob);
-
-        const formData = new FormData();
-        formData.append("image", new Blob([imageByteArray]), "image.png");
-        fetch("/image", {
-            method: "POST",
-            body: formData,
-        })
-        .then((response) => response.json())
-        .then((data) => {
-            console.log("Success:", data);
-        })
-        .catch((error) => {
-            console.error("Error:", error);
-        }).finally(() => {
-          // Hide the spinner
-          spinnerContainer.classList.add("d-none");
-          console.log('finally')
-        });
-		  };
-		  image.src = URL.createObjectURL(file);
+      const validVideoTypes = ['video/mp4', 'video/quicktime'];
+      if (validVideoTypes.includes(fileType)) {
+          console.log("a video file")
+          const firstFrameBlob = await getFirstFrameAsBlob(file);
+          console.log(firstFrameBlob);
+          handleImage(firstFrameBlob);
+      } else {
+          console.log(file);
+          handleImage(file);
+      }
 		});
 
 		removeImageButton.addEventListener('click', () => {
-			imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height); // clear the canvas
-      context.clearRect(0, 0, canvas.width, canvas.height); // clear the canvas
+			imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height); // clear the image canvas
+      context.clearRect(0, 0, canvas.width, canvas.height); // clear the drawer canvas
       stopDrawing();
       stopErasing();
       stopMagicDrawing();
@@ -538,6 +686,9 @@
       
       while (drawnPaths.length > 0) {
         drawnPaths.pop();
+      }
+      while (oriDrawnPaths.length > 0) {
+        oriDrawnPaths.pop();
       }
 			showFileInput();
       // Reset the file input value, force the browser to treat the re-uploaded file as a new file
@@ -580,6 +731,11 @@
           type: isErasing ? 'eraser' : 'brush',
           points: [],
           lineWidth: brushSize,
+        });
+        oriDrawnPaths.push({
+          type: isErasing ? 'eraser' : 'brush',
+          points: [],
+          lineWidth: brushSize / scaleFactor,
         });
       } else if (isDrawingRect) {
         rectStartX = event.offsetX;
@@ -624,26 +780,12 @@
             const maskImage = new Image();
             maskImage.src = `data:image/png;base64,${maskBase64}`;
             maskImage.onload = function() {
-              // Create a canvas element and draw the image onto it
-              const tmpcanvas = document.createElement('canvas');
-              tmpcanvas.width = canvas.width;
-              tmpcanvas.height = canvas.height;
-              const tmpcontext = tmpcanvas.getContext('2d');
+              const pixelData = getImagedataFromImageClass(maskImage, "rect");
 
-              const scaleFactor = Math.min(tmpcanvas.width / maskImage.width, tmpcanvas.height / maskImage.height);
-              const scaledWidth = maskImage.width * scaleFactor;
-              const scaledHeight = maskImage.height * scaleFactor;
+              // console.log(pixelData.length)
+              // let uniquePixelData = [...new Set(pixelData)];
+              // console.log(uniquePixelData);
 
-              const x = (canvas.width - scaledWidth) / 2;
-              const y = (canvas.height - scaledHeight) / 2;
-
-              tmpcontext.drawImage(maskImage, x, y, scaledWidth, scaledHeight);
-
-              // Get the image data from the canvas
-              const imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
-              const pixelData = imageData.data;
-
-              console.log(pixelData.length)
               // Get the pixel indices of the mask
               for (let i = 0; i < pixelData.length; i += 4) {
                 if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
@@ -684,25 +826,50 @@
       if ((isDrawing || isErasing) && isDown) {
         const x = event.offsetX;
         const y = event.offsetY;
-        context.beginPath();
-        context.moveTo(lastX, lastY);
-        context.lineTo(x, y);
-        if (isErasing) {
-          context.globalCompositeOperation = 'destination-out';
-        } else {
-          context.globalCompositeOperation = 'source-over';
-        }
-        context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
-        context.lineWidth = brushSize;
-        context.stroke();
-        context.beginPath();
-        context.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
-        context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
-        context.fill();
 
-        // Add the point to the current path
-        const currentPath = drawnPaths[drawnPaths.length - 1];
-        currentPath.points.push({ fromX: lastX, fromY: lastY, toX: x, toY: y });
+        // Check if the x and y coordinates are within the image boundaries
+        if (x >= scaledX && x < scaledX+scaledWidth && y >= scaledY && y < scaledY+scaledHeight &&
+            lastX >= scaledX && lastX < scaledX+scaledWidth && lastY >= scaledY && lastY < scaledY+scaledHeight) {
+          context.beginPath();
+          context.moveTo(lastX, lastY);
+          context.lineTo(x, y);
+          if (isErasing) {
+            context.globalCompositeOperation = 'destination-out';
+          } else {
+            context.globalCompositeOperation = 'source-over';
+          }
+          context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          context.lineWidth = brushSize;
+          context.stroke();
+          context.beginPath();
+          context.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
+          context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          context.fill();
+
+          // Add the point to the current path
+          const currentPath = drawnPaths[drawnPaths.length - 1];
+          currentPath.points.push({ fromX: lastX, fromY: lastY, toX: x, toY: y });
+          const oriCurrentPath = oriDrawnPaths[oriDrawnPaths.length - 1];
+          const {x: orilastX, y: orilastY} = getXYLocationInOriImage(lastX, lastY);
+          const {x: orix, y: oriy} = getXYLocationInOriImage(x, y);
+          oriCurrentPath.points.push({ fromX: orilastX, fromY: orilastY, toX: orix, toY: oriy });
+
+          maskcontext.beginPath();
+          maskcontext.moveTo(orilastX, orilastY);
+          maskcontext.lineTo(orix, oriy);
+          if (isErasing) {
+            maskcontext.globalCompositeOperation = 'destination-out';
+          } else {
+            maskcontext.globalCompositeOperation = 'source-over';
+          }
+          maskcontext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          maskcontext.lineWidth = brushSize / scaleFactor;
+          maskcontext.stroke();
+          maskcontext.beginPath();
+          maskcontext.arc(orix, oriy, brushSize / scaleFactor / 2, 0, 2 * Math.PI);
+          maskcontext.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          maskcontext.fill();
+        }
         
         lastX = x;
         lastY = y;
@@ -728,6 +895,7 @@
       if (drawnPaths.length > 0) {
         // Remove the last path from the array
         const lastPath = drawnPaths.pop();
+        oriDrawnPaths.pop();
         console.log(lastPath)
 
         if (lastPath.type === 'magic') {
@@ -748,6 +916,8 @@
 
         // Clear the canvas
         context.clearRect(0, 0, canvas.width, canvas.height);
+        // clear the ori-size mask canvas
+        maskcontext.clearRect(0, 0, maskcanvas.width, maskcanvas.height);
 
         // Redraw the remaining paths
         for (const path of drawnPaths) {
@@ -762,7 +932,6 @@
               data[path.points[i]+3] = alpha_255; // alpha
             }
             context.putImageData(canvasData, 0, 0);
-
           }
           else if (path.type === "everything") {
             console.log("everything")
@@ -796,6 +965,56 @@
               context.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
               context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
               context.fill();
+            }
+          }
+        }
+
+        // Redraw the remaining paths on the ori-size mask canvas
+        for (const path of oriDrawnPaths) {
+          if (path.type === "magic" || path.type === "rect") {
+            const maskData = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
+            const mask = maskData.data;
+
+            for (let i = 0; i < path.points.length; i += 1) {
+              mask[path.points[i]] = replacementColor.r;
+              mask[path.points[i]+1] = replacementColor.g;
+              mask[path.points[i]+2] = replacementColor.b;
+              mask[path.points[i]+3] = alpha_255;
+            }
+            maskcontext.putImageData(maskData, 0, 0);
+          }
+          else if (path.type === "everything") {
+            console.log("everything")
+            const maskData = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
+            const mask = maskData.data;
+
+            for (let i = 0; i < path.masks.length; i += 4) {
+              if (path.masks[i] > 0) {
+                mask[i] = random_color[path.masks[i]].r;
+                mask[i + 1] = random_color[path.masks[i]].g;
+                mask[i + 2] = random_color[path.masks[i]].b;
+                mask[i + 3] = alpha_255;
+              }
+            }
+            maskcontext.putImageData(maskData, 0, 0);
+          }
+          else {
+            maskcontext.lineWidth = path.lineWidth;
+            for (const point of path.points) {
+              maskcontext.beginPath();
+              maskcontext.moveTo(point.fromX, point.fromY);
+              maskcontext.lineTo(point.toX, point.toY);
+              if (path.type === "eraser") {
+                maskcontext.globalCompositeOperation = 'destination-out';
+              } else {
+                maskcontext.globalCompositeOperation = 'source-over';
+              }
+              maskcontext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+              maskcontext.stroke();
+              maskcontext.beginPath();
+              maskcontext.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
+              maskcontext.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+              maskcontext.fill();
             }
           }
         }
@@ -960,25 +1179,7 @@
         const maskImage = new Image();
         maskImage.src = `data:image/png;base64,${maskBase64}`;
         maskImage.onload = function() {
-          // Create a canvas element and draw the image onto it
-          const tmpcanvas = document.createElement('canvas');
-          tmpcanvas.width = canvas.width;
-          tmpcanvas.height = canvas.height;
-          const tmpcontext = tmpcanvas.getContext('2d');
-
-
-          const scaleFactor = Math.min(tmpcanvas.width / maskImage.width, tmpcanvas.height / maskImage.height);
-          const scaledWidth = maskImage.width * scaleFactor;
-          const scaledHeight = maskImage.height * scaleFactor;
-
-          const x = (canvas.width - scaledWidth) / 2;
-          const y = (canvas.height - scaledHeight) / 2;
-
-          tmpcontext.drawImage(maskImage, x, y, scaledWidth, scaledHeight);
-
-          // Get the image data from the canvas
-          const imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
-          const pixelData = imageData.data;
+          const pixelData = getImagedataFromImageClass(maskImage, "everything");
 
           const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
           const data = canvasData.data;
@@ -1002,6 +1203,69 @@
         };
       }).finally(() => {
         toggleSparkles(false);
+      });
+    });
+
+    // seg video ----------------------------------------------------------------
+    const segVideoButton = document.getElementById('seg-video');
+
+    segVideoButton.addEventListener('click', async () => {
+      const spinnerContainer = document.getElementById("spinner-container");
+      const spinnerText = spinnerContainer.querySelector('span');
+      // Change the spinner text
+      spinnerText.innerHTML = "Preprocessing video...<br>This may take a while<br>depending on video length.";
+      // Show the spinner
+      spinnerContainer.classList.remove("d-none");
+
+      // const mask_canvas = document.createElement('canvas');
+      // mask_canvas.width = originalUnresizedImageData.width;
+      // mask_canvas.height = originalUnresizedImageData.height;
+
+      // const mask_ctx = mask_canvas.getContext('2d');
+      // // this can resize the image automatically
+      // mask_ctx.drawImage(canvas, scaledX, scaledY, scaledWidth, scaledHeight, 
+      //                             0, 0, originalUnresizedImageData.width, originalUnresizedImageData.height);
+
+      const maskBlob = await canvasToBlob(maskcanvas);
+      const maskByteArray = await blobToByteArray(maskBlob);
+
+      const formData = new FormData();
+      formData.append("ini_seg", new Blob([maskByteArray]), "image.png");
+      // Send the mask data to the server
+      fetch('/ini_seg', {
+        method: 'POST',
+        body: formData
+      })
+      .then((response) => {
+        // If the response status is 204, throw an error
+        if (response.status === 204) {
+            window.alert('Video is saved already.');
+            throw new Error('Video is saved already');
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        // Create a new URL for our video
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        
+        // Use the blob URL as the href
+        a.href = url;
+        
+        // Use the Content-Disposition filename if given, otherwise fall back to a default
+        a.download = videoName + '.mp4';
+        
+        // Append the anchor to the body and simulate a click to download the file
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+      })
+      .finally(() => {
+        // Hide the spinner
+        spinnerContainer.classList.add("d-none");       
       });
     });
 

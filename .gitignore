@@ -1,2 +1,4 @@
 *.pth
 __pycache__/
+.gitignore
+*.mp4
