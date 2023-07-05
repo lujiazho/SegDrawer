@@ -180,6 +180,11 @@
 
 
 	<script type="text/javascript">
+
+    document.addEventListener('contextmenu', function(event) {
+        event.preventDefault(); // Prevent the default context menu from appearing
+    });
+
     async function canvasToBlob(canvas) {
       return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => {
@@ -308,7 +313,8 @@
           masks: pixelData,
           type: "everything",
         });
-      } else {
+      } 
+      else if (masktype == "rect") {
         let pixels = [];
         // Get the pixel indices of the mask
         for (let i = 0; i < pixelData.length; i += 4) {
@@ -327,8 +333,14 @@
 
         oriDrawnPaths.push({
           points: pixels,
-          type: masktype === 'magic' ? "magic" : "rect",
+          type: "rect",
         });
+      } 
+      else if (masktype == "magic") {
+
+      }
+      else {
+
       }
 
       // Create a canvas size element and draw the image onto it
@@ -352,6 +364,11 @@
 
       // step 1: get starting point
       const { x, y } = getEventLocationInOriImage(event);
+      promptPoints.push({
+          type: (event.which == 1) ? true : false,
+          origPoint: [event.offsetX, event.offsetY],
+          scaledPoint: [x, y],
+      });
 
       // step 2: get image data for flood fill
       const imageWidth = imageCanvas.width;
@@ -360,8 +377,16 @@
       const pixelData = imageData.data;
 
       const formData = new FormData();
-      formData.append("x", x);
-      formData.append("y", y);
+      const typeList = [];
+      const clickList = [];
+
+      for (const thisPrompt of promptPoints) {
+          typeList.push(thisPrompt.type ? 1 : 0);
+          clickList.push(thisPrompt.scaledPoint[0]);
+          clickList.push(thisPrompt.scaledPoint[1]);
+      }
+      formData.append("type", typeList);
+      formData.append("click_list", clickList);
       
       // Send a POST request to the server API
       fetch("/click", {
@@ -370,7 +395,7 @@
       })
       .then((response) => response.json())
       .then((data) => {
-          // console.log("Success:", data.masks);
+
           let pixels = [];
 
           // Get the base64-encoded image strings from the JSON response
@@ -388,23 +413,17 @@
               }
             }
             console.log(pixels.length)
+
             // step 4: put magic mask on canvas
-            const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
-            const data = canvasData.data;
-            console.log(data.length)
-            for (let i = 0; i < pixels.length; i += 1) {
-              data[pixels[i]] = replacementColor.r; // red
-              data[pixels[i] + 1] = replacementColor.g; // green
-              data[pixels[i] + 2] = replacementColor.b; // blue
-              data[pixels[i] + 3] = alpha_255; // alpha
+            redrawPaths(canvas, drawnPaths);
+            putDataOnCanvas(canvas, pixels);
+
+            for (const thisPrompt of promptPoints) {
+                drawPromptPointOnClick(thisPrompt, canvas);
             }
-            context.putImageData(canvasData, 0, 0);
 
             // step 5: Add the magic mask to drawnPaths array
-            drawnPaths.push({
-              points: pixels,
-              type: "magic",
-            });
+            interactivePaths.push(pixels);
           };
       })
       .catch((error) => {
@@ -415,13 +434,49 @@
       });
     }
 
-		const fileInput = document.getElementById('file-input');
+    function drawPromptPointOnClick(thisPrompt, canvas) {
+      let x = thisPrompt.origPoint[0];
+      let y = thisPrompt.origPoint[1];
+
+      const fillColor = `rgba(255, 255, 255, 0.75)`;
+      const strokeColor = thisPrompt.type ? `green` : `red`;
+
+      const context = canvas.getContext("2d");
+
+      context.beginPath();
+      context.arc(x, y, 3, 0, Math.PI * 2);
+      context.fillStyle = fillColor;
+      context.fill();
+      context.strokeStyle = strokeColor;
+      context.stroke();
+    }
+
+    function putDataOnCanvas(thisCanvas, pixels) {
+      const thisContext = thisCanvas.getContext("2d");
+      const canvasData = thisContext.getImageData(
+          0,
+          0,
+          thisCanvas.width,
+          thisCanvas.height
+      );
+      const data = canvasData.data;
+
+      for (let i = 0; i < pixels.length; i += 1) {
+          data[pixels[i]] = replacementColor.r; // red
+          data[pixels[i] + 1] = replacementColor.g; // green
+          data[pixels[i] + 2] = replacementColor.b; // blue
+          data[pixels[i] + 3] = alpha_255; // alpha
+      }
+      thisContext.putImageData(canvasData, 0, 0);
+    }
+
+	const fileInput = document.getElementById('file-input');
     let zipfileBase64 = null;
     let imageName = "original_image";
     let videoName = "original_video";
     // for drawer
-		const canvas = document.getElementById('canvas');
-		const context = canvas.getContext('2d');
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
     // for image
     const imageCanvas = document.getElementById('image-canvas');
     const imageContext = imageCanvas.getContext('2d');
@@ -436,8 +491,8 @@
 
     canvas.width = 500;
     canvas.height = 500;
-		imageCanvas.width = 500;
-		imageCanvas.height = 500;
+    imageCanvas.width = 500;
+    imageCanvas.height = 500;
     tempCanvas.width = 500;
     tempCanvas.height = 500;
     // for saving mask purpose
@@ -450,6 +505,11 @@
 
     let originalUnresizedImageData;
     let originalUnresizedMaskData;
+
+    // Prompt points in magic tool
+    const promptPoints = [];
+    const interactivePaths = [];
+
     // Add a new array to store drawn paths
     const drawnPaths = [];
     const oriDrawnPaths = [];
@@ -463,14 +523,14 @@
     let isErasing = false;
     // for draw mask, keep track of whether user is currently drawing
     let isDrawing = false;
-		let isDown = false;
+    let isDown = false;
     let lastX, lastY; // keep track of last position of the pointer
 
     const slider = document.getElementById("brush-size");
     let brushSize = slider.value;
 
-		const removeImageButton = document.getElementById('remove-image');
-		const drawMaskButton = document.getElementById('draw-mask');
+    const removeImageButton = document.getElementById('remove-image');
+    const drawMaskButton = document.getElementById('draw-mask');
     const magicToolButton = document.getElementById('magic-tool');
     const fileInputWrapper = document.getElementById('file-input-wrapper');
     const drawRectButton = document.getElementById('draw-rect');
@@ -491,6 +551,37 @@
         console.log(error) // do nothing
       }
       isMagicToolActive = false;
+
+      if (interactivePaths.length != 0) {
+          const mask_idx = interactivePaths.length - 1;
+          const lastPath = interactivePaths.pop();
+          promptPoints.splice(0);
+          interactivePaths.splice(0);
+
+          drawnPaths.push({
+              points: lastPath,
+              type: "magic",
+          });
+          redrawPaths(canvas, drawnPaths);
+
+          const formData = new FormData();
+          formData.append("mask_idx", mask_idx);
+          fetch("/finish_click", {
+              method: "POST",
+              body: formData,
+          })
+              .then((response) => response.json())
+              .then((data) => {
+                  console.log("Success:", data);
+              })
+              .catch((error) => {
+                  console.error("Error:", error);
+              })
+              .finally(() => {
+                  // // Hide the spinner
+                  // spinnerContainer.classList.add("d-none");
+              });
+      }
     }
     function stopErasing() {
       canvas.style.cursor = "auto";
@@ -892,7 +983,23 @@
     const undoPathButton = document.getElementById('undo-path');
 
     undoPathButton.addEventListener('click', () => {
-      if (drawnPaths.length > 0) {
+      if (promptPoints.length > 0) {
+          const lastPoint = promptPoints.pop();
+          const lastPath = interactivePaths.pop();
+
+          redrawPaths(canvas, drawnPaths);
+
+          const curLen = interactivePaths.length;
+          if (curLen > 0) {
+              putDataOnCanvas(canvas, interactivePaths[curLen - 1]);
+          }
+
+          for (const thisPrompt of promptPoints) {
+              drawPromptPointOnClick(thisPrompt, canvas);
+          }
+
+      }
+      else if (drawnPaths.length > 0) {
         // Remove the last path from the array
         const lastPath = drawnPaths.pop();
         oriDrawnPaths.pop();
@@ -912,30 +1019,31 @@
               // // Hide the spinner
               // spinnerContainer.classList.add("d-none");
           });
-        }
+        } 
 
         // Clear the canvas
-        context.clearRect(0, 0, canvas.width, canvas.height);
+        redrawPaths(canvas, drawnPaths);
+
         // clear the ori-size mask canvas
-        maskcontext.clearRect(0, 0, maskcanvas.width, maskcanvas.height);
+        redrawPaths(maskcanvas, oriDrawnPaths);
+      }
+      else {
+      }
+    });
+
+    function redrawPaths(thisCanvas, thisDrawnPaths) {
+        // Clear the thisCanvas
+        const thisContext = thisCanvas.getContext("2d");
+        thisContext.clearRect(0, 0, thisCanvas.width, thisCanvas.height);
 
         // Redraw the remaining paths
-        for (const path of drawnPaths) {
+        for (const path of thisDrawnPaths) {
           if (path.type === "magic" || path.type === "rect") {
-            const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
-            const data = canvasData.data;
-
-            for (let i = 0; i < path.points.length; i += 1) {
-              data[path.points[i]] = replacementColor.r; // red
-              data[path.points[i]+1] = replacementColor.g; // green
-              data[path.points[i]+2] = replacementColor.b; // blue
-              data[path.points[i]+3] = alpha_255; // alpha
-            }
-            context.putImageData(canvasData, 0, 0);
+            putDataOnCanvas(thisCanvas, path.points);
           }
           else if (path.type === "everything") {
             console.log("everything")
-            const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const canvasData = thisContext.getImageData(0, 0, thisCanvas.width, thisCanvas.height);
             const data = canvasData.data;
 
             for (let i = 0; i < path.masks.length; i += 4) {
@@ -946,81 +1054,29 @@
                 data[i + 3] = alpha_255; // alpha
               }
             }
-            context.putImageData(canvasData, 0, 0);
+            thisContext.putImageData(canvasData, 0, 0);
           }
           else {
-            context.lineWidth = path.lineWidth;
+            thisContext.lineWidth = path.lineWidth;
             for (const point of path.points) {
-              context.beginPath();
-              context.moveTo(point.fromX, point.fromY);
-              context.lineTo(point.toX, point.toY);
+              thisContext.beginPath();
+              thisContext.moveTo(point.fromX, point.fromY);
+              thisContext.lineTo(point.toX, point.toY);
               if (path.type === "eraser") {
-                context.globalCompositeOperation = 'destination-out';
+                thisContext.globalCompositeOperation = 'destination-out';
               } else {
-                context.globalCompositeOperation = 'source-over';
+                thisContext.globalCompositeOperation = 'source-over';
               }
-              context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
-              context.stroke();
-              context.beginPath();
-              context.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
-              context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
-              context.fill();
+              thisContext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+              thisContext.stroke();
+              thisContext.beginPath();
+              thisContext.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
+              thisContext.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+              thisContext.fill();
             }
           }
         }
-
-        // Redraw the remaining paths on the ori-size mask canvas
-        for (const path of oriDrawnPaths) {
-          if (path.type === "magic" || path.type === "rect") {
-            const maskData = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
-            const mask = maskData.data;
-
-            for (let i = 0; i < path.points.length; i += 1) {
-              mask[path.points[i]] = replacementColor.r;
-              mask[path.points[i]+1] = replacementColor.g;
-              mask[path.points[i]+2] = replacementColor.b;
-              mask[path.points[i]+3] = alpha_255;
-            }
-            maskcontext.putImageData(maskData, 0, 0);
-          }
-          else if (path.type === "everything") {
-            console.log("everything")
-            const maskData = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
-            const mask = maskData.data;
-
-            for (let i = 0; i < path.masks.length; i += 4) {
-              if (path.masks[i] > 0) {
-                mask[i] = random_color[path.masks[i]].r;
-                mask[i + 1] = random_color[path.masks[i]].g;
-                mask[i + 2] = random_color[path.masks[i]].b;
-                mask[i + 3] = alpha_255;
-              }
-            }
-            maskcontext.putImageData(maskData, 0, 0);
-          }
-          else {
-            maskcontext.lineWidth = path.lineWidth;
-            for (const point of path.points) {
-              maskcontext.beginPath();
-              maskcontext.moveTo(point.fromX, point.fromY);
-              maskcontext.lineTo(point.toX, point.toY);
-              if (path.type === "eraser") {
-                maskcontext.globalCompositeOperation = 'destination-out';
-              } else {
-                maskcontext.globalCompositeOperation = 'source-over';
-              }
-              maskcontext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
-              maskcontext.stroke();
-              maskcontext.beginPath();
-              maskcontext.arc(point.toX, point.toY, path.lineWidth / 2, 0, 2 * Math.PI);
-              maskcontext.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
-              maskcontext.fill();
-            }
-          }
-        }
-      }
-    });
-
+    }
 
     // magic tool ----------------------------------------------------------------
     // function getPixelIndex(x, y, width) {
@@ -1041,9 +1097,7 @@
         canvas.addEventListener("mousedown", magicToolHandler);
         isMagicToolActive = true;
       } else {
-        canvas.style.cursor = "auto";
-        canvas.removeEventListener("mousedown", magicToolHandler);
-        isMagicToolActive = false;
+        stopMagicDrawing();
       }
     });
 
