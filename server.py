@@ -78,8 +78,6 @@ async def process_images(
 ):
     global segmented_mask, interactive_mask
     global GLOBAL_IMAGE, GLOBAL_MASK, GLOBAL_ZIPBUFFER
-    import os
-    cache_path = "./embedding_cached.pt"
 
     segmented_mask = []
     interactive_mask = []
@@ -93,15 +91,7 @@ async def process_images(
     GLOBAL_IMAGE = img[:,:,:-1]
     GLOBAL_MASK = None
     GLOBAL_ZIPBUFFER = None
-    # produce an image embedding by calling SamPredictor.set_image
 
-    # if os.path.exists(cache_path):
-    #     predictor.load_embedding(cache_path)
-    #     print(predictor.is_image_set)
-    # else:
-    #     predictor.set_image(GLOBAL_IMAGE)
-    #     predictor.save_embedding(cache_path)
-    #     print("finish setting image")
     predictor.set_image(GLOBAL_IMAGE)
 
     # Return a JSON response
@@ -268,6 +258,7 @@ async def process_videos(
 @app.post("/undo")
 async def undo_mask():
     global segmented_mask
+    # this is not necessary actually because segmented_mask is only maintained but not used
     segmented_mask.pop()
 
     return JSONResponse(

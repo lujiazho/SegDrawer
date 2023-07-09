@@ -182,7 +182,7 @@
 	<script type="text/javascript">
 
     document.addEventListener('contextmenu', function(event) {
-        event.preventDefault(); // Prevent the default context menu from appearing
+        event.preventDefault(); // Prevent the default context menu from appearing (right-click menu in browsers)
     });
 
     async function canvasToBlob(canvas) {
@@ -281,6 +281,8 @@
     //   return { x, y };
     // }
 
+
+    // only seg_everything, rect, and magic tool need to use this function
     function getImagedataFromImageClass(Image, masktype) {
       // Create a original size element and draw the image onto it
       let tmpcanvas = document.createElement('canvas');
@@ -337,10 +339,19 @@
         });
       } 
       else if (masktype == "magic") {
+        let pixels = [];
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+            pixels.push(i);
+          }
+        }
 
+        // we don't add anything to the oriDrawnPaths while interactive mode
+        oriInteractivePaths.push(pixels);
       }
       else {
-
+        // do nothing
       }
 
       // Create a canvas size element and draw the image onto it
@@ -509,6 +520,7 @@
     // Prompt points in magic tool
     const promptPoints = [];
     const interactivePaths = [];
+    const oriInteractivePaths = [];
 
     // Add a new array to store drawn paths
     const drawnPaths = [];
@@ -555,14 +567,22 @@
       if (interactivePaths.length != 0) {
           const mask_idx = interactivePaths.length - 1;
           const lastPath = interactivePaths.pop();
+          const oriLastPath = oriInteractivePaths.pop();
           promptPoints.splice(0);
           interactivePaths.splice(0);
+          oriInteractivePaths.splice(0);
 
+          // draw on scaled-size canvas
           drawnPaths.push({
               points: lastPath,
               type: "magic",
           });
           redrawPaths(canvas, drawnPaths);
+          // draw on original-size canvas
+          oriDrawnPaths.push({
+              points: oriLastPath,
+              type: "magic",
+          });
 
           const formData = new FormData();
           formData.append("mask_idx", mask_idx);
@@ -986,6 +1006,7 @@
       if (promptPoints.length > 0) {
           const lastPoint = promptPoints.pop();
           const lastPath = interactivePaths.pop();
+          oriInteractivePaths.pop();
 
           redrawPaths(canvas, drawnPaths);
 
@@ -1105,6 +1126,11 @@
     const saveImagesButton = document.getElementById('save-images');
 
     saveImagesButton.addEventListener('click', () => {
+      // stop everything
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
       // Save the original sized image
       const tmp_canvas = document.createElement('canvas');
       tmp_canvas.width = originalUnresizedImageData.width;
@@ -1217,6 +1243,11 @@
     const segEverythingButton = document.getElementById('seg-everything');
 
     segEverythingButton.addEventListener('click', () => {
+      // stop everything
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
       // Show sparkles when processing starts
       toggleSparkles(true);
 
@@ -1264,6 +1295,12 @@
     const segVideoButton = document.getElementById('seg-video');
 
     segVideoButton.addEventListener('click', async () => {
+      // stop everything
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
+      // Show sparkles when processing starts
       const spinnerContainer = document.getElementById("spinner-container");
       const spinnerText = spinnerContainer.querySelector('span');
       // Change the spinner text
