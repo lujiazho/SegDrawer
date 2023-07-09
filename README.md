@@ -59,7 +59,7 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
 From top to bottom
 - Clear image
 - Drawer
-- SAM point-segmenter with interactive functionality(Need backend)
+- SAM point-segmenter with interactive functionality (Need backend)
 - SAM rect-segmenter (Need backend)
 - SAM Seg-Everything (Need backend)
 - Undo
@@ -82,7 +82,7 @@ After **Seg-Everything**, the downloaded files would include .zip file, which co
 
 For **Video Segmentation**, according to [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
 
-Note: you may not want to draw the segmentation map manually with the tool `Drawer` (Same problem holds for `Eraser`), which leads to non-single color paints especially on the edge as shown below. This is not good for XMem video segmentation. For more details please refer to the original paper.
+Note: you may not want to draw the segmentation map manually with the tool `Drawer` (Same problem holds for `Eraser`), which leads to non-single color paints especially on the edge as shown below. This is not good for XMem video segmentation. For more details please refer to the original paper. Using SAM for segmenting is preferable.
 
 <table>
   <tr>
@@ -97,14 +97,13 @@ For **Interactive Segmentation**
 1. How to start
     - Click magic wand button (the curso becomes cross)
 2. How to use
-    - Postive prompt by single left click
-    - Negative prompt by single right click
+    - **Postive prompt** by single left click
+    - **Negative prompt** by single right click
     - The behavior of revert button will change, which removes the latest interactive prompt
 3. How to end
-    - Click the magic wand button once again (the curso becomes normal)
+    - Click the magic wand button once again (the curso becomes normal). Note: it's actually **safe** to click any other button while in interactive mode.
     - The latest mask will save to the mask collections
     - The behavior of revert button will be turned back
-
 
 # Run Locally
 
@@ -123,7 +122,7 @@ python server.py
 ```
 - Go to Browser
 ```
-http://127.0.0.1:8000
+http://127.0.0.1:7860
 ```
 
 For configuring CPU/GPU and model, just change the code in server.py
@@ -133,6 +132,6 @@ model_type = "vit_l" # "vit_l" or "vit_h"
 device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 ```
 
-# Run on Colab
+# Colab Tutorial
 
 Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing). Need to register an ngrok account and copy your token to replace "{your_token}".
