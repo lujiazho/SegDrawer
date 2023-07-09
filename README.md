@@ -40,12 +40,26 @@ Simple static web-based mask drawer, supporting semantic drawing with Segment An
   </tr>
 </table>
 
+- Interactive segmentation
+<table>
+  <tr>
+    <td align="center">
+      Interactive segmentation<br>
+      <img src="example/interactive_seg/interactive.gif" width="240" />
+    </td>
+    <td align="center">
+      Revert during interactive seg.<br>
+      <img src="example/interactive_seg/revert.gif" width="240" />
+    </td>
+  </tr>
+</table>
+
 # Tools
 
 From top to bottom
 - Clear image
 - Drawer
-- SAM point-segmenter (Need backend)
+- SAM point-segmenter with interactive functionality(Need backend)
 - SAM rect-segmenter (Need backend)
 - SAM Seg-Everything (Need backend)
 - Undo
@@ -77,6 +91,20 @@ Note: you may not want to draw the segmentation map manually with the tool `Draw
     </td>
   </tr>
 </table>
+
+For **Interactive Segmentation**
+
+1. How to start
+    - Click magic wand button (the curso becomes cross)
+2. How to use
+    - Postive prompt by single left click
+    - Negative prompt by single right click
+    - The behavior of revert button will change, which removes the latest interactive prompt
+3. How to end
+    - Click the magic wand button once again (the curso becomes normal)
+    - The latest mask will save to the mask collections
+    - The behavior of revert button will be turned back
+
 
 # Run Locally
 

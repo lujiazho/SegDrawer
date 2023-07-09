@@ -63,7 +63,10 @@ palette = [random.randint(0, 255) for _ in range(256*3)]
 input_point = []
 input_label = []
 masks = []
-mask_input = [None]
+
+segmented_mask = []
+interactive_mask = []
+mask_input = None
 
 GLOBAL_IMAGE = None
 GLOBAL_MASK = None
@@ -73,13 +76,13 @@ GLOBAL_ZIPBUFFER = None
 async def process_images(
     image: UploadFile = File(...)
 ):
-    global input_point, input_label, mask_input, masks
+    global segmented_mask, interactive_mask
     global GLOBAL_IMAGE, GLOBAL_MASK, GLOBAL_ZIPBUFFER
+    import os
+    cache_path = "./embedding_cached.pt"
 
-    input_point = []
-    input_label = []
-    masks = []
-    # mask_input = [None]
+    segmented_mask = []
+    interactive_mask = []
 
     # Read the image and mask data as bytes
     image_data = await image.read()
@@ -91,8 +94,16 @@ async def process_images(
     GLOBAL_MASK = None
     GLOBAL_ZIPBUFFER = None
     # produce an image embedding by calling SamPredictor.set_image
+
+    # if os.path.exists(cache_path):
+    #     predictor.load_embedding(cache_path)
+    #     print(predictor.is_image_set)
+    # else:
+    #     predictor.set_image(GLOBAL_IMAGE)
+    #     predictor.save_embedding(cache_path)
+    #     print("finish setting image")
     predictor.set_image(GLOBAL_IMAGE)
-    print("finish setting image")
+
     # Return a JSON response
     return JSONResponse(
         content={
@@ -256,11 +267,8 @@ async def process_videos(
 
 @app.post("/undo")
 async def undo_mask():
-    global input_point, input_label, mask_input
-    input_point.pop()
-    input_label.pop()
-    masks.pop()
-    # mask_input.pop()
+    global segmented_mask
+    segmented_mask.pop()
 
     return JSONResponse(
         content={
@@ -269,34 +277,51 @@ async def undo_mask():
         status_code=200,
     )
 
+
+from fastapi import Request
+
+
 @app.post("/click")
 async def click_images(
-    x: int = Form(...), # horizontal
-    y: int = Form(...)  # vertical
+    request: Request,
 ):  
-    global input_point, input_label, mask_input
-    input_point.append([x, y])
-    input_label.append(1)
-    print("get click", x, y)
-    print("input_point", input_point)
-    print("input_label", input_label)
-    
+    global mask_input, interactive_mask
+
+    form_data = await request.form()
+    type_list = [int(i) for i in form_data.get("type").split(',')]
+    click_list = [int(i) for i in form_data.get("click_list").split(',')]
+    # x_list = [int(i) for i in form_data.get("x").split(',')]
+    # y_list = [int(i) for i in form_data.get("y").split(',')]
+
+    point_coords = np.array(click_list, np.float32).reshape(-1, 2)
+    point_labels = np.array(type_list).reshape(-1)
+
+    print(point_coords)
+    print(point_labels)
+
+    if (len(point_coords) == 1):
+        mask_input = None
+
     masks_, scores_, logits_ = predictor.predict(
-        point_coords=np.array([input_point[-1]]),
-        point_labels=np.array([input_label[-1]]),
-        # mask_input=mask_input[-1],
-        multimask_output=True, # SAM outputs 3 masks, we choose the one with highest score
+        point_coords=point_coords,
+        point_labels=point_labels,
+        mask_input=mask_input,
+        multimask_output=True,
     )
-    
-    # mask_input.append(logits[np.argmax(scores), :, :][None, :, :])
-    masks.append(masks_[np.argmax(scores_), :, :])
-    res = np.zeros(masks[0].shape)
-    for mask in masks:
-        res = np.logical_or(res, mask)
-    res = Image.fromarray(res)
-    # res.save("res.png")
+
+    best_idx = np.argmax(scores_)
+    res = masks_[best_idx]
+    mask_input = logits_[best_idx][None, :, :]
+
+    len_prompt = len(point_labels)
+    len_mask = len(interactive_mask)
+    if len_mask == 0 or len_mask < len_prompt:
+        interactive_mask.append(res)
+    else:
+        interactive_mask[len_prompt-1] = res
 
     # Return a JSON response
+    res = Image.fromarray(res)
     return JSONResponse(
         content={
             "masks": pil_image_to_base64(res),
@@ -304,6 +329,23 @@ async def click_images(
         },
         status_code=200,
     )
+
+@app.post("/finish_click")
+async def finish_interactive_click(
+    mask_idx: int = Form(...),
+):
+    global segmented_mask, interactive_mask
+
+    segmented_mask.append(interactive_mask[mask_idx])
+    interactive_mask = list()
+
+    return JSONResponse(
+        content={
+            "message": "Finish successfully",
+        },
+        status_code=200,
+    )
+    
 
 @app.post("/rect")
 async def rect_images(
@@ -418,4 +460,4 @@ async def read_index():
     return read_content('segDrawer.html')
 
 import uvicorn
-uvicorn.run(app, host="0.0.0.0", port=8000)
+uvicorn.run(app, host="0.0.0.0", port=7860)
