@@ -1,5 +1,5 @@
 # SegDrawer
-Simple static web-based mask drawer, supporting semantic drawing with Segment Anything Model ([SAM](https://github.com/facebookresearch/segment-anything)) and Video Segmentation Propagation with [XMem](https://github.com/hkchengrex/XMem).
+Simple static web-based mask drawer, supporting semantic drawing with interactive Segment Anything Model ([SAM](https://github.com/facebookresearch/segment-anything)) and Video Segmentation Propagation with [XMem](https://github.com/hkchengrex/XMem).
 
 <table>
   <tr>
