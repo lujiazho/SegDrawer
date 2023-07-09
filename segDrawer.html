@@ -583,6 +583,7 @@
               points: oriLastPath,
               type: "magic",
           });
+          redrawPaths(maskcanvas, oriDrawnPaths);
 
           const formData = new FormData();
           formData.append("mask_idx", mask_idx);
