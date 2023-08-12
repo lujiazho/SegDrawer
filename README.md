@@ -116,6 +116,10 @@ For example
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 wget -P ./XMem/saves/ https://github.com/hkchengrex/XMem/releases/download/v1.0/XMem.pth
 ```
+- Install the dependencies
+```shell
+pip install -r requirements.txt
+```
 - Launch backend
 ```
 python server.py
