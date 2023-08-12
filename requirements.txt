@@ -30,3 +30,5 @@ typing_extensions==4.7.1
 urllib3==2.0.4
 uvicorn==0.23.2
 yarg==0.1.9
+git+https://github.com/facebookresearch/segment-anything.git
+
