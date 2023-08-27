@@ -94,7 +94,7 @@ class ResNetV1b(nn.Module):
     classes : int, default 1000
         Number of classification classes.
     dilated : bool, default False
-        Applying dilation strategy to pretrained ResNet yielding a stride-8 model,
+        Applying dilation strategy to pre-trained ResNet yielding a stride-8 model,
         typically used in Semantic Segmentation.
     norm_layer : object
         Normalization layer used (default: :class:`nn.BatchNorm2d`)

@@ -6,7 +6,7 @@ from dataset.util import all_to_onehot
 
 class MaskMapper:
     """
-    This class is used to convert a indexed-mask to a one-hot representation.
+    This class is used to convert an indexed-mask to a one-hot representation.
     It also takes care of remapping non-continuous indices
     It has two modes:
         1. Default. Only masks with new indices are supposed to go into the remapper.

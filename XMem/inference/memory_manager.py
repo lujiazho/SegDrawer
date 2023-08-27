@@ -180,7 +180,7 @@ class MemoryManager:
 
         # long-term memory cleanup
         if self.enable_long_term:
-            # Do memory compressed if needed
+            # Do memory compress if needed
             if self.work_mem.size >= self.max_work_elements:
                 # Remove obsolete features if needed
                 if self.long_mem.size >= (self.max_long_elements-self.num_prototypes):
@@ -267,7 +267,7 @@ class MemoryManager:
             for gi, gv in enumerate(candidate_value)
         ]
 
-        # some values can be have all False validity. Weed them out.
+        # some values can have all False validity. Weed them out.
         affinity = [
             aff if aff is None or aff.shape[-1] > 0 else None for aff in affinity
         ]

@@ -60,7 +60,7 @@ class VOSDataset(Dataset):
             transforms.RandomAffine(degrees=0 if finetune or self.is_bl else 15, shear=0 if finetune or self.is_bl else 10, interpolation=InterpolationMode.NEAREST, fill=0),
         ])
 
-        # These transform are the same for all pairs in the sampled sequence
+        # These transforms are the same for all pairs in the sampled sequence
         self.all_im_lone_transform = transforms.Compose([
             transforms.ColorJitter(0.1, 0.03, 0.03, 0),
             transforms.RandomGrayscale(0.05),

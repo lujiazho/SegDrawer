@@ -18,7 +18,7 @@ def get_similarity(mk, ms, qk, qe):
     qe = qe.flatten(start_dim=2) if qe is not None else None
 
     if qe is not None:
-        # See appendix for derivation
+        # See appendix for derivation,
         # or you can just trust me ヽ(ー_ー )ノ
         mk = mk.transpose(1, 2)
         a_sq = (mk.pow(2) @ qe)

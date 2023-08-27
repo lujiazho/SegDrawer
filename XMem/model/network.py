@@ -3,7 +3,7 @@ This file defines XMem, the highest level nn.Module interface
 During training, it is used by trainer.py
 During evaluation, it is used by inference_core.py
 
-It further depends on modules.py which gives more detailed implementations of sub-modules
+It further depends on modules.py which gives more detailed implementations of submodules
 """
 
 import torch
@@ -137,7 +137,7 @@ class XMem(nn.Module):
         If model_path is provided, we load these from the model weights
         The actual parameters are then updated to the config in-place
 
-        Otherwise we load it either from the config or default
+        Otherwise, we load it either from the config or default
         """
         if model_path is not None:
             # load the model and key/value/hidden dimensions with some hacks

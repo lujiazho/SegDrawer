@@ -85,7 +85,7 @@ class XMemTrainer:
                     ref_shrinkage = shrinkage[:,:,:ti] if shrinkage is not None else None
                 else:
                     # pick num_ref_frames random frames
-                    # this is not very efficient but I think we would 
+                    # this is not very efficient, but I think we would
                     # need broadcasting in gather which we don't have
                     indices = [
                         torch.cat([filler_one, torch.randperm(ti-1)[:self.num_ref_frames-1]+1])
