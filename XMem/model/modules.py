@@ -42,7 +42,7 @@ class FeatureFusionBlock(nn.Module):
 
 
 class HiddenUpdater(nn.Module):
-    # Used in the decoder, multi-scale feature + GRU
+    # Used in the decoder, multiscale feature + GRU
     def __init__(self, g_dims, mid_dim, hidden_dim):
         super().__init__()
         self.hidden_dim = hidden_dim
@@ -63,7 +63,7 @@ class HiddenUpdater(nn.Module):
 
         # defined slightly differently than standard GRU, 
         # namely the new value is generated before the forget gate.
-        # might provide better gradient but frankly it was initially just an 
+        # might provide better gradient, but frankly it was initially just an
         # implementation error that I never bothered fixing
         values = self.transform(g)
         forget_gate = torch.sigmoid(values[:,:,:self.hidden_dim])
@@ -88,7 +88,7 @@ class HiddenReinforcer(nn.Module):
 
         # defined slightly differently than standard GRU, 
         # namely the new value is generated before the forget gate.
-        # might provide better gradient but frankly it was initially just an 
+        # might provide better gradient, but frankly it was initially just an
         # implementation error that I never bothered fixing
         values = self.transform(g)
         forget_gate = torch.sigmoid(values[:,:,:self.hidden_dim])

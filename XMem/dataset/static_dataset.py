@@ -61,7 +61,7 @@ class StaticTransformDataset(Dataset):
         ])
 
 
-        # These transform are the same for all pairs in the sampled sequence
+        # These transforms are the same for all pairs in the sampled sequence
         self.all_im_lone_transform = transforms.Compose([
             transforms.ColorJitter(0.1, 0.05, 0.05, 0.05),
             transforms.RandomGrayscale(0.05),

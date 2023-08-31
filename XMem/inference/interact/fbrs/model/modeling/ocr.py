@@ -61,7 +61,7 @@ class SpatialOCR_Module(nn.Module):
 
 
 class ObjectAttentionBlock2D(nn.Module):
-    '''
+    """
     The basic implementation for object context block
     Input:
         N X C X H X W
@@ -72,7 +72,7 @@ class ObjectAttentionBlock2D(nn.Module):
         bn_type           : specify the bn type
     Return:
         N X C X H X W
-    '''
+    """
 
     def __init__(self,
                  in_channels,

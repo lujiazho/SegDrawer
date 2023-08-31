@@ -107,14 +107,18 @@ For **Interactive Segmentation**
 
 # Run Locally
 
-If don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
+If you don't need SAM for segmentation, just open segDrawer.html and use tools except SAM segmenter.
 
-If use SAM segmenter, do following steps (CPU can be time-consuming)
+If you use SAM segmenter, do following steps (CPU can be time-consuming)
 - Download models as mentioned in [segment-anything](https://github.com/facebookresearch/segment-anything) and [XMem](https://github.com/hkchengrex/XMem).
 For example
 ```
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 wget -P ./XMem/saves/ https://github.com/hkchengrex/XMem/releases/download/v1.0/XMem.pth
+```
+- Install the dependencies
+```shell
+pip install -r requirements.txt
 ```
 - Launch backend
 ```
@@ -134,4 +138,4 @@ device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 
 # Colab Tutorial
 
-Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing). Need to register an ngrok account and copy your token to replace "{your_token}".
+Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing). Need to register a ngrok account and copy your token to replace "{your_token}".

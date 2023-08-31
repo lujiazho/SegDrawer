@@ -198,7 +198,7 @@ class Attention(nn.Module):
         Args:
             dim (int): Number of input channels.
             num_heads (int): Number of attention heads.
-            qkv_bias (bool:  If True, add a learnable bias to query, key, value.
+            qkv_bias (bool):  If True, add a learnable bias to query, key, value.
             rel_pos (bool): If True, add relative positional embeddings to the attention map.
             rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
             input_size (int or None): Input resolution for calculating the relative positional

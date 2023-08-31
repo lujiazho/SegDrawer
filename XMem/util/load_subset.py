@@ -1,7 +1,7 @@
 """
 load_subset.py - Presents a subset of data
 DAVIS - only the training set
-YouTubeVOS - I manually filtered some erroneous ones out but I haven't checked all
+YouTubeVOS - I manually filtered some erroneous ones out, but I haven't checked all
 """
 
 

@@ -22,7 +22,7 @@ For PyTorch, please refer to https://pytorch.org/
 
 NOTE : The code is tested only with PyTorch v1.0.0, CUDA10/CuDNN7.4.2 on ubuntu18.04
 
-It utilize Pytorch JIT mechanism to compile seamlessly, using ninja. Please install ninja-build before use.
+It utilizes Pytorch JIT mechanism to compile seamlessly, using ninja. Please install ninja-build before use.
 
 ```
 sudo apt-get install ninja-build
@@ -100,7 +100,7 @@ z = model(x)
 
     where <img src="https://latex.codecogs.com/gif.latex?j\in[0,1,....,num\_gpu]"/>
 
-    then gather them at master node to sum up global, and normalize with N where N is total number of elements for each channels. Global sums are then shared among all gpus.
+    then gather them at master node to sum up global, and normalize with N where N is total number of elements for each channel. Global sums are then shared among all gpus.
 
 3. compute gradients using global stats
 
