@@ -6,15 +6,22 @@ from fastapi import HTTPException
 
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry, SamPredictor
 
+from segment_anything_2.sam2_image_predictor import SAM2ImagePredictor
+from segment_anything_2.build_sam import build_sam2, build_sam2_video_predictor
+from segment_anything_2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+
+
 import os
 import cv2
 import time
 import torch
+import shutil
 import zipfile
 import tempfile
 import numpy as np
 from io import BytesIO
 from PIL import Image
+import matplotlib.pyplot as plt
 from base64 import b64encode, b64decode
 
 def pil_image_to_base64(image):
@@ -31,8 +38,6 @@ def read_content(file_path: str) -> str:
 
     return content
 
-sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
-model_type = "vit_l" # "vit_l" or "vit_h"
 # device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 if torch.cuda.is_available():
     print('Using GPU')
@@ -41,11 +46,29 @@ else:
     print('CUDA not available. Please connect to a GPU instance if possible.')
     device = 'cpu'
 
-print("Loading model")
-sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
-print("Finishing loading")
-predictor = SamPredictor(sam)
-mask_generator = SamAutomaticMaskGenerator(sam)
+use_sam2 = True
+if not use_sam2:
+    sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
+    model_type = "vit_l" # "vit_l" or "vit_h"
+
+    print("Loading model")
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+    print("Finishing loading")
+    predictor = SamPredictor(sam)
+    mask_generator = SamAutomaticMaskGenerator(sam)
+else:
+    sam2_checkpoint = "sam2_hiera_tiny.pt"
+    model_cfg = "sam2_hiera_t.yaml"
+
+    sam2_model = build_sam2(model_cfg, sam2_checkpoint, device="cuda")
+
+    predictor = SAM2ImagePredictor(sam2_model) # for single image
+    
+    vid_predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint) # for video
+    inference_state = None
+
+    mask_generator = SAM2AutomaticMaskGenerator(sam2_model) # seg_everything
+
 
 app = FastAPI(debug=True)
 app.add_middleware(
@@ -106,96 +129,159 @@ from XMem import XMem, InferenceCore, image_to_torch, index_numpy_to_one_hot_tor
 
 torch.set_grad_enabled(False)
 
-def seg_propagation(video_name, mask_name):
-    # default configuration
-    config = {
-        'top_k': 30,
-        'mem_every': 5,
-        'deep_update_every': -1,
-        'enable_long_term': True,
-        'enable_long_term_count_usage': True,
-        'num_prototypes': 128,
-        'min_mid_term_frames': 5,
-        'max_mid_term_frames': 10,
-        'max_long_term_elements': 10000,
-    }
+if not use_sam2:
+    def seg_propagation(video_name, mask_name):
+        # default configuration
+        config = {
+            'top_k': 30,
+            'mem_every': 5,
+            'deep_update_every': -1,
+            'enable_long_term': True,
+            'enable_long_term_count_usage': True,
+            'num_prototypes': 128,
+            'min_mid_term_frames': 5,
+            'max_mid_term_frames': 10,
+            'max_long_term_elements': 10000,
+        }
 
-    network = XMem(config, './XMem/saves/XMem.pth').eval().to(device)
+        network = XMem(config, './XMem/saves/XMem.pth').eval().to(device)
 
-    im = Image.open(mask_name).convert('L')
-    im.putpalette(palette)
-    mask = np.array(im)
-    acc = 0
-    for i in range(256):
-        if np.sum(mask==i) == 0:
-            acc += 1
-            mask[mask==i] -= acc-1
-        else:
-            mask[mask==i] -= acc
-    print(np.unique(mask))
-    num_objects = len(np.unique(mask)) - 1
-
-    st = time.time()
-    # torch.cuda.empty_cache()
-
-    processor = InferenceCore(network, config=config)
-    processor.set_all_labels(range(1, num_objects+1)) # consecutive labels
-    cap = cv2.VideoCapture(video_name)
-
-    # You can change these two numbers
-    frames_to_propagate = 1500
-    visualize_every = 1
-
-    current_frame_index = 0
-
-    masked_video = []
-
-    with torch.cuda.amp.autocast(enabled=True):
-        while (cap.isOpened()):
-            # load frame-by-frame
-            _, frame = cap.read()
-            if frame is None or current_frame_index > frames_to_propagate:
-                break
-
-            # convert numpy array to pytorch tensor format
-            frame_torch, _ = image_to_torch(frame, device=device)
-            if current_frame_index == 0:
-                # initialize with the mask
-                mask_torch = index_numpy_to_one_hot_torch(mask, num_objects+1).to(device)
-                # the background mask is not fed into the model
-                prediction = processor.step(frame_torch, mask_torch[1:])
+        im = Image.open(mask_name).convert('L')
+        im.putpalette(palette)
+        mask = np.array(im)
+        acc = 0
+        for i in range(256):
+            if np.sum(mask==i) == 0:
+                acc += 1
+                mask[mask==i] -= acc-1
             else:
-                # propagate only
-                prediction = processor.step(frame_torch)
+                mask[mask==i] -= acc
+        print(np.unique(mask))
+        num_objects = len(np.unique(mask)) - 1
 
-            # argmax, convert to numpy
-            prediction = torch_prob_to_numpy_mask(prediction)
+        st = time.time()
+        # torch.cuda.empty_cache()
 
-            if current_frame_index % visualize_every == 0:
-                visualization = overlay_davis(frame[...,::-1], prediction)
-                masked_video.append(visualization)
+        processor = InferenceCore(network, config=config)
+        processor.set_all_labels(range(1, num_objects+1)) # consecutive labels
+        cap = cv2.VideoCapture(video_name)
 
-            current_frame_index += 1
-    ed = time.time()
+        # You can change these two numbers
+        frames_to_propagate = 1500
+        visualize_every = 1
 
-    print(f"Propagation time: {ed-st} s")
+        current_frame_index = 0
 
-    from moviepy.editor import ImageSequenceClip, AudioFileClip
+        masked_video = []
+
+        with torch.cuda.amp.autocast(enabled=True):
+            while (cap.isOpened()):
+                # load frame-by-frame
+                _, frame = cap.read()
+                if frame is None or current_frame_index > frames_to_propagate:
+                    break
+
+                # convert numpy array to pytorch tensor format
+                frame_torch, _ = image_to_torch(frame, device=device)
+                if current_frame_index == 0:
+                    # initialize with the mask
+                    mask_torch = index_numpy_to_one_hot_torch(mask, num_objects+1).to(device)
+                    # the background mask is not fed into the model
+                    prediction = processor.step(frame_torch, mask_torch[1:])
+                else:
+                    # propagate only
+                    prediction = processor.step(frame_torch)
+
+                # argmax, convert to numpy
+                prediction = torch_prob_to_numpy_mask(prediction)
+
+                if current_frame_index % visualize_every == 0:
+                    visualization = overlay_davis(frame[...,::-1], prediction)
+                    masked_video.append(visualization)
+
+                current_frame_index += 1
+        ed = time.time()
+
+        print(f"Propagation time: {ed-st} s")
+
+        from moviepy.editor import ImageSequenceClip, AudioFileClip
+        
+        audio = AudioFileClip(video_name)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        output_dir = f'./XMem/output/{video_name.split("/")[-1].split(".")[0]}.mp4'
+        if not os.path.exists('./XMem/output/'):
+            os.mkdir('./XMem/output/')
+        clip = ImageSequenceClip(sequence=masked_video, fps=fps)
+        # Set the audio of the new video to be the audio from the original video
+        clip = clip.set_audio(audio)
+        clip.write_videofile(output_dir, fps=fps, audio=True)
+
+        return output_dir
+else:
+    def get_mask(mask, obj_id=None):
+        cmap = plt.get_cmap("tab10")
+        cmap_idx = 0 if obj_id is None else obj_id
+        color = np.array([*cmap(cmap_idx)[:3], 0.6])
+
+        # print(color, mask.shape)
+
+        h, w = mask.shape[-2:]
+        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+        return mask_image
+
+    def overlay_mask(image, masks):
+        for mask_ in masks:
+            alpha = mask_[..., 3:]
+            mask_ = mask_[..., :3]
+            # print(set(mask_.flatten()), set(alpha.flatten()))
+            image = image * (1 - alpha) + mask_ * alpha
+        return image
     
-    audio = AudioFileClip(video_name)
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    def seg_propagation():
+        global VIDEO_NAME, VIDEO_PATH, FPS, inference_state
 
-    output_dir = f'./XMem/output/{video_name.split("/")[-1].split(".")[0]}.mp4'
-    if not os.path.exists('./XMem/output/'):
-        os.mkdir('./XMem/output/')
-    clip = ImageSequenceClip(sequence=masked_video, fps=fps)
-    # Set the audio of the new video to be the audio from the original video
-    clip = clip.set_audio(audio)
-    clip.write_videofile(output_dir, fps=fps, audio=True)
+        st = time.time()
 
-    return output_dir
+        video_segments = {}  # video_segments contains the per-frame segmentation results
+        masked_video = []
+        for out_frame_idx, out_obj_ids, out_mask_logits in vid_predictor.propagate_in_video(inference_state):
+            video_segments[out_frame_idx] = {
+                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                for i, out_obj_id in enumerate(out_obj_ids)
+            }
+
+            masked_video.append(
+                overlay_mask(cv2.imread(f"{VIDEO_PATH}/{out_frame_idx}.jpg")[...,::-1], [get_mask(out_mask, out_obj_id) for out_obj_id, out_mask in video_segments[out_frame_idx].items()])
+            )
+        
+        ed = time.time()
+
+        print(f"Propagation time: {ed-st} s")
+
+        from moviepy.editor import ImageSequenceClip, AudioFileClip
+
+        output_dir = f'./output/{VIDEO_NAME.split("/")[-1].split(".")[0]}.mp4'
+        if not os.path.exists('./output/'):
+            os.mkdir('./output/')
+
+        AUDIO = AudioFileClip(VIDEO_NAME)
+        print(len(masked_video), FPS, AUDIO)
+
+        try:
+            clip = ImageSequenceClip(sequence=masked_video, fps=FPS)
+            # Set the audio of the new video to be the audio from the original video
+            clip = clip.set_audio(AUDIO)
+            clip.write_videofile(output_dir, fps=FPS, audio=True)
+        except:
+            clip = ImageSequenceClip(sequence=masked_video, fps=FPS)
+            clip.write_videofile(output_dir, fps=FPS, audio=False)
+
+        return output_dir
 
 VIDEO_NAME = ""
+VIDEO_PATH = ""
+FPS = 0
 
 @app.post("/video")
 async def obtain_videos(
@@ -211,10 +297,35 @@ async def obtain_videos(
 
     print(temp_file.name)
 
-    global VIDEO_NAME
+    global VIDEO_NAME, VIDEO_PATH, FPS, inference_state
     if VIDEO_NAME != "":
         os.unlink(VIDEO_NAME)
     VIDEO_NAME = temp_file.name
+
+    if use_sam2:
+        VIDEO_PATH = VIDEO_NAME.split('.')[0]
+        if not os.path.exists(VIDEO_PATH):
+            os.mkdir(VIDEO_PATH)
+        print(VIDEO_PATH)
+        # save the video frames in jpg format
+        cap = cv2.VideoCapture(VIDEO_NAME)
+        frame_count = 0
+        while (cap.isOpened()):
+            # load frame-by-frame
+            _, frame = cap.read()
+            if frame is None:
+                break
+            
+            cv2.imwrite(f"{VIDEO_PATH}/{frame_count}.jpg", frame)
+            frame_count += 1
+            # print(f"Succeed in saving frame {frame_count}")
+
+        FPS = cap.get(cv2.CAP_PROP_FPS)
+        
+        cap.release()
+
+        inference_state = vid_predictor.init_state(video_path=VIDEO_PATH)
+        vid_predictor.reset_state(inference_state)
 
     return JSONResponse(
         content={
@@ -227,7 +338,7 @@ async def obtain_videos(
 async def process_videos(
     ini_seg: UploadFile = File(...)
 ):
-    global VIDEO_NAME
+    global VIDEO_NAME, VIDEO_PATH
 
     ini_seg_data = await ini_seg.read()
 
@@ -237,12 +348,16 @@ async def process_videos(
 
     print(tmp_seg_file.name)
 
-    if VIDEO_NAME == "":
+    if VIDEO_NAME == "" and VIDEO_PATH == "":
         raise HTTPException(status_code=204, detail="No content")
     
-    res_path = seg_propagation(VIDEO_NAME, tmp_seg_file.name)
+    if not use_sam2:
+        res_path = seg_propagation(VIDEO_NAME, tmp_seg_file.name)
+    else:
+        res_path = seg_propagation()
 
     os.unlink(tmp_seg_file.name)
+    shutil.rmtree(VIDEO_PATH)
     # os.unlink(VIDEO_NAME)
     # VIDEO_NAME = ""
 
@@ -276,7 +391,7 @@ from fastapi import Request
 async def click_images(
     request: Request,
 ):  
-    global mask_input, interactive_mask
+    global mask_input, interactive_mask, inference_state
 
     form_data = await request.form()
     type_list = [int(i) for i in form_data.get("type").split(',')]
@@ -293,16 +408,27 @@ async def click_images(
     if (len(point_coords) == 1):
         mask_input = None
 
-    masks_, scores_, logits_ = predictor.predict(
-        point_coords=point_coords,
-        point_labels=point_labels,
-        mask_input=mask_input,
-        multimask_output=True,
-    )
+    if VIDEO_NAME == "":
+        masks_, scores_, logits_ = predictor.predict(
+            point_coords=point_coords,
+            point_labels=point_labels,
+            mask_input=mask_input,
+            multimask_output=True,
+        )
 
-    best_idx = np.argmax(scores_)
-    res = masks_[best_idx]
-    mask_input = logits_[best_idx][None, :, :]
+        best_idx = np.argmax(scores_)
+        res = masks_[best_idx]
+        mask_input = logits_[best_idx][None, :, :]
+    else:
+        _, _, out_mask_logits = vid_predictor.add_new_points(
+            inference_state=inference_state,
+            frame_idx=0,
+            obj_id=1,
+            points=point_coords,
+            labels=point_labels,
+        )
+        # print(out_mask_logits.shape)
+        res = (out_mask_logits[0][0] > 0.0).cpu().numpy()
 
     len_prompt = len(point_labels)
     len_mask = len(interactive_mask)

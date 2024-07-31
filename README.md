@@ -1,5 +1,5 @@
 # SegDrawer
-Simple static web-based mask drawer, supporting semantic drawing with interactive Segment Anything Model ([SAM](https://github.com/facebookresearch/segment-anything)) and Video Segmentation Propagation with [XMem](https://github.com/hkchengrex/XMem).
+Simple static web-based mask drawer, supporting semantic drawing with interactive Segment Anything Model ([SAM](https://github.com/facebookresearch/segment-anything)) and Video Segmentation Propagation with [XMem](https://github.com/hkchengrex/XMem), and with the stat-of-the-art Segment Anything Model 2 ([SAM2](https://github.com/facebookresearch/segment-anything-2/)).
 
 <table>
   <tr>
@@ -15,7 +15,7 @@ Simple static web-based mask drawer, supporting semantic drawing with interactiv
   </tr>
 </table>
 
-- Video Segmentation with [XMem](https://github.com/hkchengrex/XMem)
+- Video Segmentation with [XMem](https://github.com/hkchengrex/XMem) or [SAM2](https://github.com/facebookresearch/segment-anything-2/).
 
 <table>
   <tr>
@@ -67,7 +67,7 @@ From top to bottom
 - Download
 - VideoSeg (Need backend)
 
-After **Seg-Everything**, the downloaded files would include .zip file, which contains all cut-offs.
+After **Seg-Everything**, the downloaded files would include .zip file, which contains all cut-offs. All these tools use [SAM2](https://github.com/facebookresearch/segment-anything-2/) under the hood in default.
 
 <table>
   <tr>
@@ -80,7 +80,7 @@ After **Seg-Everything**, the downloaded files would include .zip file, which co
   </tr>
 </table>
 
-For **Video Segmentation**, according to [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
+For **Video Segmentation** with [SAM2](https://github.com/facebookresearch/segment-anything-2/) or [XMem](https://github.com/hkchengrex/XMem), an initial segmentation map is needed, which can be easily achieved with [SAM](https://github.com/facebookresearch/segment-anything) or [SAM2](https://github.com/facebookresearch/segment-anything-2/). You can upload a video just as uploading an image, then draw a segmentation on it, after which you can click the final button of `VideoSeg` to upload it to the server and wait for the automatic download of video seg result.
 
 Note: you may not want to draw the segmentation map manually with the tool `Drawer` (Same problem holds for `Eraser`), which leads to non-single color paints especially on the edge as shown below. This is not good for XMem video segmentation. For more details please refer to the original paper. Using SAM for segmenting is preferable.
 
@@ -113,9 +113,14 @@ If you use SAM segmenter, do following steps (CPU can be time-consuming)
 - Download models as mentioned in [segment-anything](https://github.com/facebookresearch/segment-anything) and [XMem](https://github.com/hkchengrex/XMem).
 For example
 ```
+wget https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_tiny.pt
+```
+or
+```
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth
 wget -P ./XMem/saves/ https://github.com/hkchengrex/XMem/releases/download/v1.0/XMem.pth
 ```
+
 - Install the dependencies
 ```shell
 pip install -r requirements.txt
@@ -139,3 +144,7 @@ device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 # Colab Tutorial
 
 Follow this [Colab example](SegDrawer.ipynb), or run on [Colab](https://colab.research.google.com/drive/1PdWCpBgYwiQtvkdTBnW-y2T-s_Fc-2iI?usp=sharing). Need to register a ngrok account and copy your token to replace "{your_token}".
+
+# Development
+
+There might be some bugs because this is an old version long ago and I haven't had the opportunity to fix them. Feel free to contribute by pulling requests or submitting issues.

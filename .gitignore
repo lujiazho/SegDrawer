@@ -2,3 +2,5 @@
 __pycache__/
 .gitignore
 *.mp4
+*.mp3
+*.pt

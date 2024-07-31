@@ -682,6 +682,13 @@
 
           // When video can be played through, upload to server
           video.addEventListener('canplaythrough', function() {
+              const spinnerContainer = document.getElementById("spinner-container");
+              const spinnerText = spinnerContainer.querySelector('span');
+              // Change the spinner text
+              spinnerText.textContent = "Uploading video...";
+              // Show the spinner
+              spinnerContainer.classList.remove("d-none");
+
               // Create new FormData instance and append the video file
               const formData = new FormData();
               formData.append("video", file);
@@ -699,6 +706,8 @@
                   console.error("Error:", error);
               })
               .finally(() => {
+                  // Hide the spinner
+                  spinnerContainer.classList.add("d-none");
                   console.log('finally')
               });
           }, false);
@@ -706,19 +715,21 @@
     }
 
     // for processing image
-    function handleImage(file) {
+    function handleImage(file, is_video) {
         // Extract and store the uploaded image name
         imageName = file.name.split('.')[0];
         console.log(imageName)
 
         const image = new Image();
         image.onload = async () => {
-          const spinnerContainer = document.getElementById("spinner-container");
-          const spinnerText = spinnerContainer.querySelector('span');
-          // Change the spinner text
-          spinnerText.textContent = "Preprocessing image...";
-          // Show the spinner
-          spinnerContainer.classList.remove("d-none");
+          if (!is_video) {
+            const spinnerContainer = document.getElementById("spinner-container");
+            const spinnerText = spinnerContainer.querySelector('span');
+            // Change the spinner text
+            spinnerText.textContent = "Preprocessing image...";
+            // Show the spinner
+            spinnerContainer.classList.remove("d-none");
+          }
           
           // for keeping original sized image
           const tmp_canvas = document.createElement('canvas');
@@ -747,6 +758,12 @@
 
           hideFileInput();
 
+          if (is_video) {
+              // Hide the spinner
+              spinnerContainer.classList.add("d-none");
+              console.log('finally')
+              return;
+          }
           const imageBlob = await canvasToBlob(tmp_canvas);
           const imageByteArray = await blobToByteArray(imageBlob);
 
@@ -781,10 +798,10 @@
           console.log("a video file")
           const firstFrameBlob = await getFirstFrameAsBlob(file);
           console.log(firstFrameBlob);
-          handleImage(firstFrameBlob);
+          handleImage(firstFrameBlob, 1);
       } else {
           console.log(file);
-          handleImage(file);
+          handleImage(file, 0);
       }
 		});
 
