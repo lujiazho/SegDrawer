@@ -304,9 +304,9 @@ async def obtain_videos(
 
     if use_sam2:
         VIDEO_PATH = os.path.join('./output', VIDEO_NAME.split("/")[-1].split(".")[0])
-        if not os.path.exists(VIDEO_PATH):
-            os.mkdir(VIDEO_PATH)
-        print(VIDEO_PATH)
+        os.mkdir(VIDEO_PATH, exist_ok=True)
+
+        print("VIDEO_PATH", VIDEO_PATH)
         # save the video frames in jpg format
         cap = cv2.VideoCapture(VIDEO_NAME)
         frame_count = 0
