@@ -304,7 +304,7 @@ async def obtain_videos(
 
     if use_sam2:
         VIDEO_PATH = os.path.join('./output', VIDEO_NAME.split("/")[-1].split(".")[0])
-        os.mkdir(VIDEO_PATH, exist_ok=True)
+        os.mkdirs(VIDEO_PATH, exist_ok=True)
 
         print("VIDEO_PATH", VIDEO_PATH)
         # save the video frames in jpg format
