@@ -20,3 +20,4 @@ tqdm
 typing_extensions
 uvicorn
 pyngrok
+hydra-core>=1.3.2
