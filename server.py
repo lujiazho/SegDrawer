@@ -233,7 +233,7 @@ else:
     def overlay_mask(image, masks):
         for mask_ in masks:
             alpha = mask_[..., 3:]
-            mask_ = mask_[..., :3]
+            mask_ = mask_[..., :3] * 255
             # print(set(mask_.flatten()), set(alpha.flatten()))
             image = image * (1 - alpha) + mask_ * alpha
         return image
@@ -304,7 +304,8 @@ async def obtain_videos(
 
     if use_sam2:
         VIDEO_PATH = os.path.join('./output', VIDEO_NAME.split("/")[-1].split(".")[0])
-        os.mkdirs(VIDEO_PATH, exist_ok=True)
+        os.makedirs(VIDEO_PATH, exist_ok=True)
+        assert os.path.exists(VIDEO_PATH)
 
         print("VIDEO_PATH", VIDEO_PATH)
         # save the video frames in jpg format
@@ -357,7 +358,7 @@ async def process_videos(
         res_path = seg_propagation()
 
     os.unlink(tmp_seg_file.name)
-    shutil.rmtree(VIDEO_PATH)
+    # shutil.rmtree(VIDEO_PATH)
     # os.unlink(VIDEO_NAME)
     # VIDEO_NAME = ""
 

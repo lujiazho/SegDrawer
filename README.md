@@ -21,21 +21,21 @@ Simple static web-based mask drawer, supporting semantic drawing with interactiv
   <tr>
     <td align="center">
       <a href="https://www.youtube.com/watch?v=fn3KWM1kuAw">original video</a><br>
-      <img src="example/XMem/BostonDynamics_ori.gif" width="300" />
+      <img src="example/video_seg/BostonDynamics_ori.gif" width="300" />
     </td>
     <td align="center">
-      first frame<br>
-      <img src="example/XMem/BostonDynamics_frame.png" width="300" />
+      first frame seg<br>
+      <img src="example/video_seg/BostonDynamics_mask.png" width="300" />
     </td>
   </tr>
   <tr>
     <td align="center">
-      segmentation<br>
-      <img src="example/XMem/BostonDynamics_mask.png" width="300" />
+      XMem<br>
+      <img src="example/video_seg/BostonDynamics_seg.gif" width="300" />
     </td>
     <td align="center">
-      VideoSeg<br>
-      <img src="example/XMem/BostonDynamics_seg.gif" width="300" />
+      SAM2<br>
+      <img src="example/video_seg/BostonDynamics_sam2_seg.gif" width="300" />
     </td>
   </tr>
 </table>

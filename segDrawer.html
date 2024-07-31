@@ -759,9 +759,6 @@
           hideFileInput();
 
           if (is_video) {
-              // Hide the spinner
-              spinnerContainer.classList.add("d-none");
-              console.log('finally')
               return;
           }
           const imageBlob = await canvasToBlob(tmp_canvas);
