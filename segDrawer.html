@@ -722,8 +722,8 @@
 
         const image = new Image();
         image.onload = async () => {
+          const spinnerContainer = document.getElementById("spinner-container");
           if (!is_video) {
-            const spinnerContainer = document.getElementById("spinner-container");
             const spinnerText = spinnerContainer.querySelector('span');
             // Change the spinner text
             spinnerText.textContent = "Preprocessing image...";
